@@ -179,9 +179,6 @@ function ProductSheet({ value, onClose }: { value: Product | null | "new"; onClo
     onClose();
   };
   const m = margin(f);
-  const F = ({ label, e, children }: { label: string; e?: string; children: React.ReactNode }) => (
-    <label className="block space-y-1"><span className="text-xs text-muted-foreground">{label}</span>{children}{e && <span className="text-xs text-danger">{e}</span>}</label>
-  );
   return (
     <Sheet open={!!value} onOpenChange={(o) => !o && onClose()}>
       <SheetContent className="overflow-y-auto">
@@ -221,6 +218,10 @@ function ProductSheet({ value, onClose }: { value: Product | null | "new"; onClo
     </Sheet>
   );
 }
+
+const F = ({ label, e, children }: { label: string; e?: string; children: React.ReactNode }) => (
+  <label className="block space-y-1"><span className="text-xs text-muted-foreground">{label}</span>{children}{e && <span className="text-xs text-danger">{e}</span>}</label>
+);
 
 function Barcode({ value }: { value: string }) {
   const ref = useRef<SVGSVGElement>(null);

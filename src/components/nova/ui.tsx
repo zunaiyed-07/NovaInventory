@@ -22,7 +22,8 @@ export function Panel({ className, children }: { className?: string; children: R
 }
 
 export function StockBadges({ p }: { p: Product }) {
-  const { t, num, unit } = { ...useI18n(), unit: useI18n().t.unit };
+  const { t, num } = useI18n();
+  const unit = t.unit;
   const s = stockState(p);
   return (
     <div className="flex flex-wrap gap-1">
