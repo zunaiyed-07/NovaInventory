@@ -2,7 +2,7 @@ import type { Dict } from "./en";
 
 export const bn: Dict = {
   brand: "নোভা ইনভেন্টরি",
-  nav: { dashboard: "ড্যাশবোর্ড", pos: "বিক্রয়", inventory: "মজুদ", returns: "ফেরত", ledger: "বাকি খাতা", settings: "সেটিংস", reports: "রিপোর্ট" },
+  nav: { dashboard: "ড্যাশবোর্ড", pos: "বিক্রয়", inventory: "মজুদ", returns: "ফেরত", ledger: "বাকি খাতা", settings: "সেটিংস", reports: "খরচ ও রিপোর্ট" },
   shift: {
     open: "শিফট চালু", closed: "শিফট বন্ধ", register: "শিফট রেজিস্টার", openShift: "শিফট শুরু", closeShift: "শিফট বন্ধ করুন",
     openingCash: "শুরুর ক্যাশ", openedAt: "শুরুর সময়", expected: "প্রত্যাশিত ক্যাশ", actual: "গণনাকৃত ক্যাশ",
@@ -33,10 +33,31 @@ export const bn: Dict = {
     saleDone: "বিক্রি সম্পন্ন হয়েছে", receipt: "রসিদ", ecoReceipt: "ইকো QR রসিদ", ecoHint: "কাগজবিহীন রসিদ দেখতে গ্রাহক স্ক্যান করুন।",
     printReceipt: "রসিদ প্রিন্ট", newSale: "নতুন বিক্রি",
   },
-  scanner: { title: "বারকোড স্ক্যানার", hint: "বারকোডটি ফ্রেমের ভেতরে রাখুন", simulate: "স্ক্যান সিমুলেট", manual: "বারকোড লিখুন", notFound: "এই বারকোডের কোনো পণ্য নেই", added: "কার্টে যোগ হয়েছে" },
+  scanner: {
+    title: "বারকোড স্ক্যানার", hint: "বারকোডটি ফ্রেমের ভেতরে রাখুন", manual: "বারকোড বা SKU লিখুন",
+    notFound: "এই বারকোড বা SKU-র কোনো পণ্য নেই", added: "কার্টে যোগ হয়েছে", cameraStarting: "ক্যামেরার অনুমতি চাওয়া হচ্ছে…",
+    permissionDenied: "ক্যামেরার অনুমতি দেওয়া হয়নি। অনুমতি দিন অথবা বারকোড লিখুন।",
+    noCamera: "কোনো ক্যামেরা পাওয়া যায়নি। ক্যামেরা সংযোগ করুন অথবা বারকোড লিখুন।",
+    cameraError: "ক্যামেরা চালু করা যায়নি। ব্রাউজারের অনুমতি পরীক্ষা করুন অথবা বারকোড লিখুন।",
+  },
+  reports: {
+    title: "ব্যবসায়িক খরচ ও মাসিক লাভ-ক্ষতি", month: "রিপোর্টের মাস", totalSales: "মোট বিক্রি",
+    cogs: "পণ্যের মোট ক্রয়মূল্য", grossProfit: "বিক্রয় লাভ", totalExpenses: "দোকানের মোট খরচ",
+    netProfit: "প্রকৃত নিট লাভ / ক্ষতি", expenseBreakdown: "খরচের বিভাগভিত্তিক হিসাব",
+    expenseHistory: "খরচের তালিকা", addExpense: "খরচ যোগ করুন", newExpense: "নতুন ব্যবসায়িক খরচ",
+    expenseTitle: "শিরোনাম", category: "বিভাগ", amount: "পরিমাণ (৳)", date: "তারিখ", note: "নোট",
+    optionalNote: "ঐচ্ছিক নোট", saveExpense: "খরচ সংরক্ষণ", noExpenses: "এই মাসে কোনো খরচ রেকর্ড করা হয়নি।",
+    deleteExpense: "খরচ মুছুন", printMonthlyReport: "মাসিক স্টেটমেন্ট প্রিন্ট",
+    statement: "মাসিক আর্থিক বিবরণী", completedSales: "সম্পন্ন বিক্রি", netProfitPositive: "নিট লাভ",
+    netProfitNegative: "নিট ক্ষতি", categoryRent: "দোকান ভাড়া", categorySalary: "কর্মচারীর বেতন",
+    categoryElectricity: "বিদ্যুৎ", categoryUtilities: "ইউটিলিটি", categoryMaintenance: "রক্ষণাবেক্ষণ",
+    categoryOther: "অন্যান্য", invalidExpense: "শিরোনাম, সঠিক তারিখ এবং শূন্যের বেশি পরিমাণ দিন।",
+    expenseSaved: "খরচ সংরক্ষিত", confirmDelete: "এই খরচটি মুছবেন?",
+  },
   receipt: { invoice: "ইনভয়েস", cashier: "ক্যাশিয়ার", item: "পণ্য", amt: "টাকা", paid: "পরিশোধিত", method: "মাধ্যম", thanks: "ধন্যবাদ!" },
   inv: {
     title: "মজুদ", addProduct: "পণ্য যোগ", editProduct: "পণ্য সম্পাদনা", product: "পণ্য", sku: "SKU", barcode: "বারকোড", category: "ক্যাটাগরি",
+    barcodeScanned: "বারকোড স্ক্যান হয়েছে",
     cost: "ক্রয়মূল্য", price: "বিক্রয়মূল্য", margin: "মার্জিন", stock: "মজুদ", minAlert: "সতর্কতা সীমা", expiry: "মেয়াদ", unit: "একক",
     nameEn: "নাম (ইংরেজি)", nameBn: "নাম (বাংলা)", normal: "স্বাভাবিক", low: "কম মজুদ", out: "স্টক নেই", nearExpiry: "মেয়াদ শেষের পথে",
     labels: "লেবেল প্রিন্ট", labelSheet: "শেলফ লেবেল শিট", exportCsv: "CSV এক্সপোর্ট", importCsv: "CSV ইমপোর্ট", imported: "পণ্য ইমপোর্ট হয়েছে",

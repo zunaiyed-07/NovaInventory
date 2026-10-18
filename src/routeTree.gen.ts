@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as InventoryRouteImport } from './routes/inventory'
 import { Route as LedgerRouteImport } from './routes/ledger'
 import { Route as PosRouteImport } from './routes/pos'
+import { Route as ReportsRouteImport } from './routes/reports'
 import { Route as ReturnsRouteImport } from './routes/returns'
 import { Route as SettingsRouteImport } from './routes/settings'
 
@@ -36,6 +37,11 @@ const PosRoute = PosRouteImport.update({
   path: '/pos',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ReportsRoute = ReportsRouteImport.update({
+  id: '/reports',
+  path: '/reports',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ReturnsRoute = ReturnsRouteImport.update({
   id: '/returns',
   path: '/returns',
@@ -52,6 +58,7 @@ export interface FileRoutesByFullPath {
   '/inventory': typeof InventoryRoute
   '/ledger': typeof LedgerRoute
   '/pos': typeof PosRoute
+  '/reports': typeof ReportsRoute
   '/returns': typeof ReturnsRoute
   '/settings': typeof SettingsRoute
 }
@@ -60,6 +67,7 @@ export interface FileRoutesByTo {
   '/inventory': typeof InventoryRoute
   '/ledger': typeof LedgerRoute
   '/pos': typeof PosRoute
+  '/reports': typeof ReportsRoute
   '/returns': typeof ReturnsRoute
   '/settings': typeof SettingsRoute
 }
@@ -69,20 +77,36 @@ export interface FileRoutesById {
   '/inventory': typeof InventoryRoute
   '/ledger': typeof LedgerRoute
   '/pos': typeof PosRoute
+  '/reports': typeof ReportsRoute
   '/returns': typeof ReturnsRoute
   '/settings': typeof SettingsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/inventory' | '/ledger' | '/pos' | '/returns' | '/settings'
+  fullPaths:
+    | '/'
+    | '/inventory'
+    | '/ledger'
+    | '/pos'
+    | '/reports'
+    | '/returns'
+    | '/settings'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/inventory' | '/ledger' | '/pos' | '/returns' | '/settings'
+  to:
+    | '/'
+    | '/inventory'
+    | '/ledger'
+    | '/pos'
+    | '/reports'
+    | '/returns'
+    | '/settings'
   id:
     | '__root__'
     | '/'
     | '/inventory'
     | '/ledger'
     | '/pos'
+    | '/reports'
     | '/returns'
     | '/settings'
   fileRoutesById: FileRoutesById
@@ -92,6 +116,7 @@ export interface RootRouteChildren {
   InventoryRoute: typeof InventoryRoute
   LedgerRoute: typeof LedgerRoute
   PosRoute: typeof PosRoute
+  ReportsRoute: typeof ReportsRoute
   ReturnsRoute: typeof ReturnsRoute
   SettingsRoute: typeof SettingsRoute
 }
@@ -126,6 +151,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PosRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/reports': {
+      id: '/reports'
+      path: '/reports'
+      fullPath: '/reports'
+      preLoaderRoute: typeof ReportsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/returns': {
       id: '/returns'
       path: '/returns'
@@ -148,6 +180,7 @@ const rootRouteChildren: RootRouteChildren = {
   InventoryRoute: InventoryRoute,
   LedgerRoute: LedgerRoute,
   PosRoute: PosRoute,
+  ReportsRoute: ReportsRoute,
   ReturnsRoute: ReturnsRoute,
   SettingsRoute: SettingsRoute,
 }

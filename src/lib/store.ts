@@ -1,9 +1,9 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import type {
-  CartItem, CustomerLedger, Lang, PaymentMethod, Product, Role, SaleTransaction, ShiftRegister, StoreSettings, Voucher,
+  CartItem, CustomerLedger, Expense, Lang, PaymentMethod, Product, Role, SaleTransaction, ShiftRegister, StoreSettings, Voucher,
 } from "./types";
-import { defaultSettings, mockCustomers, mockProducts, mockSales, mockShift } from "./mock";
+import { defaultSettings, mockCustomers, mockExpenses, mockProducts, mockSales, mockShift } from "./mock";
 
 const uid = () => Math.random().toString(36).slice(2, 10);
 
@@ -28,6 +28,7 @@ interface Data {
   shift: ShiftRegister | null;
   shiftHistory: ShiftRegister[];
   vouchers: Voucher[];
+  expenses: Expense[];
   settings: StoreSettings;
 }
 
@@ -46,7 +47,9 @@ interface State extends Data {
   addCustomer: (c: Omit<CustomerLedger, "id" | "currentDue">) => void;
   recordRepayment: (customerId: string, amount: number) => void;
   openShift: (openingCash: number) => void;
-  addExpense: (reason: string, amount: number) => void;
+  addPettyExpense: (reason: string, amount: number) => void;
+  addExpense: (expense: Omit<Expense, "id">) => void;
+  deleteExpense: (id: string) => void;
   closeShift: (actualCash: number) => ShiftRegister | null;
   setSettings: (s: StoreSettings) => void;
   restore: (d: Partial<Data>) => void;
@@ -55,7 +58,7 @@ interface State extends Data {
 
 const seed = (): Data => ({
   products: mockProducts, customers: mockCustomers, sales: mockSales, shift: mockShift(),
-  shiftHistory: [], vouchers: [], settings: defaultSettings,
+  shiftHistory: [], vouchers: [], expenses: mockExpenses, settings: defaultSettings,
 });
 
 export const useStore = create<State>()(
@@ -136,12 +139,14 @@ export const useStore = create<State>()(
         })),
       openShift: (openingCash) =>
         set({ shift: { id: uid(), status: "open", openedAt: new Date().toISOString(), openingCash, pettyExpenses: [], expectedCash: openingCash } }),
-      addExpense: (reason, amount) =>
+      addPettyExpense: (reason, amount) =>
         set((s) =>
           s.shift
             ? { shift: { ...s.shift, expectedCash: s.shift.expectedCash - amount, pettyExpenses: [...s.shift.pettyExpenses, { id: uid(), reason, amount, time: new Date().toISOString() }] } }
             : {},
         ),
+      addExpense: (expense) => set((s) => ({ expenses: [{ ...expense, id: uid() }, ...s.expenses] })),
+      deleteExpense: (id) => set((s) => ({ expenses: s.expenses.filter((expense) => expense.id !== id) })),
       closeShift: (actualCash) => {
         const sh = get().shift;
         if (!sh) return null;
@@ -150,10 +155,19 @@ export const useStore = create<State>()(
         return closed;
       },
       setSettings: (settings) => set({ settings }),
-      restore: (d) => set(d),
+      restore: (d) => set({ ...d, expenses: d.expenses ?? mockExpenses }),
       resetData: () => set(seed()),
     }),
-    { name: "nova-inventory-v1", storage: createJSONStorage(() => localStorage), skipHydration: true },
+    {
+      name: "nova-inventory-v1",
+      version: 1,
+      storage: createJSONStorage(() => localStorage),
+      skipHydration: true,
+      migrate: (persisted, version) => {
+        if (version < 1) return { ...(persisted as Partial<State>), expenses: mockExpenses };
+        return persisted as State;
+      },
+    },
   ),
 );
 

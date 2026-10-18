@@ -1,4 +1,4 @@
-import type { CartItem, CustomerLedger, Product, SaleTransaction, ShiftRegister, StoreSettings } from "./types";
+import type { CartItem, CustomerLedger, Expense, Product, SaleTransaction, ShiftRegister, StoreSettings } from "./types";
 
 const day = (offset: number, h = 11, m = 0) => {
   const d = new Date();
@@ -45,6 +45,18 @@ export const mockSales: SaleTransaction[] = [
   sale(3, day(-2, 18), [line(P.p8, 5), line(P.p2, 3)], "credit", "c3"),
   sale(4, day(-1, 12), [line(P.p6, 2), line(P.p10, 5), line(P.p4, 4)], "card"),
   sale(5, day(0, 9, 30), [line(P.p1, 5), line(P.p7, 3), line(P.p3, 6)], "cash"),
+];
+
+const expenseDate = (dayOfMonth: number) => {
+  const now = new Date();
+  const day = Math.min(dayOfMonth, now.getDate());
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+};
+
+export const mockExpenses: Expense[] = [
+  { id: "expense-rent", title: "Shop Rent", category: "rent", amount: 18000, date: expenseDate(1), note: "Monthly shop rent" },
+  { id: "expense-electricity", title: "Electric Bill", category: "electricity", amount: 3200, date: expenseDate(8), note: "Monthly electricity bill" },
+  { id: "expense-staff", title: "Staff Advance", category: "salary", amount: 6500, date: expenseDate(15), note: "Staff salary advance" },
 ];
 
 export const mockShift = (): ShiftRegister => ({

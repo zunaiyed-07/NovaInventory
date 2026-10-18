@@ -1,6 +1,6 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
-import { Boxes, LayoutDashboard, Moon, RotateCcw, Search, Settings, ShoppingCart, Sun, BookUser, Command as CmdIcon, Download, X } from "lucide-react";
+import { Boxes, LayoutDashboard, Moon, PieChart, RotateCcw, Search, Settings, ShoppingCart, Sun, BookUser, Command as CmdIcon, Download, X } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -13,6 +13,7 @@ const NAV = [
   { to: "/inventory", key: "inventory", icon: Boxes },
   { to: "/returns", key: "returns", icon: RotateCcw },
   { to: "/ledger", key: "ledger", icon: BookUser },
+  { to: "/reports", key: "reports", icon: PieChart },
   { to: "/settings", key: "settings", icon: Settings },
 ] as const;
 
@@ -110,26 +111,26 @@ export function AppShell({ children }: { children: ReactNode }) {
             />
           </div>
         </div>
-        <nav className="flex gap-1 overflow-x-auto border-t px-3 py-1.5 lg:hidden">
-          {NAV.map((n) => (
-            <Link
-              key={n.to}
-              to={n.to}
-              activeOptions={{ exact: n.to === "/" }}
-              className="flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1 text-xs text-muted-foreground"
-              activeProps={{ className: "bg-muted text-foreground font-medium" }}
-            >
-              <n.icon className="size-3.5" />
-              {t.nav[n.key]}
-            </Link>
-          ))}
-          <div className="ml-auto shrink-0 sm:hidden">
-            <Seg value={role} onChange={setRole} options={[{ v: "admin", label: t.common.admin }, { v: "cashier", label: t.common.cashier }]} />
-          </div>
-        </nav>
       </header>
+      <nav className="fixed inset-x-0 bottom-0 z-40 flex gap-1 overflow-x-auto border-t bg-background/95 px-3 py-1.5 backdrop-blur lg:hidden">
+        {NAV.map((n) => (
+          <Link
+            key={n.to}
+            to={n.to}
+            activeOptions={{ exact: n.to === "/" }}
+            className="flex shrink-0 flex-col items-center gap-0.5 rounded-md px-2.5 py-1 text-[10px] text-muted-foreground"
+            activeProps={{ className: "bg-muted text-foreground font-medium" }}
+          >
+            <n.icon className="size-4" />
+            {t.nav[n.key]}
+          </Link>
+        ))}
+        <div className="ml-auto shrink-0 sm:hidden">
+          <Seg value={role} onChange={setRole} options={[{ v: "admin", label: t.common.admin }, { v: "cashier", label: t.common.cashier }]} />
+        </div>
+      </nav>
 
-      <main className="mx-auto max-w-[1440px] px-4 py-6">{children}</main>
+      <main className="mx-auto max-w-[1440px] px-4 py-6 pb-24 lg:pb-6">{children}</main>
 
       <CommandDialog open={open} onOpenChange={setOpen}>
         <CommandInput placeholder={t.cmd.placeholder} />
@@ -142,10 +143,6 @@ export function AppShell({ children }: { children: ReactNode }) {
                 {t.nav[n.key]}
               </CommandItem>
             ))}
-            <CommandItem value={`view ${t.nav.reports} reports`} onSelect={() => go("/")}>
-              <LayoutDashboard className="mr-2 size-4" />
-              {t.nav.reports}
-            </CommandItem>
           </CommandGroup>
           <CommandGroup heading={t.cmd.products}>
             {products.map((p) => (
@@ -194,7 +191,7 @@ function InstallPrompt() {
   const [hidden, setHidden] = useState(false);
   if (!canInstall || hidden) return null;
   return (
-    <div className="fixed inset-x-4 bottom-4 z-50 mx-auto flex max-w-md items-center gap-3 rounded-lg border bg-card p-3 shadow-lg">
+    <div className="fixed inset-x-4 bottom-20 z-50 mx-auto flex max-w-md items-center gap-3 rounded-lg border bg-card p-3 shadow-lg lg:bottom-4">
       <div className="grid size-9 shrink-0 place-items-center rounded-md bg-foreground text-background font-bold">N</div>
       <p className="text-sm">{t.settings.installHint}</p>
       <Button size="sm" onClick={install}>

@@ -7,6 +7,7 @@ import { useStore, stockState } from "@/lib/store";
 import { useI18n } from "@/lib/i18n";
 import { Panel, CatIcon } from "@/components/nova/ui";
 import { ThermalReceipt } from "@/components/nova/Receipt";
+import { BarcodeScanner } from "@/components/nova/BarcodeScanner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -38,6 +39,8 @@ function POS() {
   const [q, setQ] = useState("");
   const [cat, setCat] = useState<string>("all");
   const [cart, setCart] = useState<CartItem[]>([]);
+  const cartRef = useRef(cart);
+  cartRef.current = cart;
   const [discType, setDiscType] = useState<"flat" | "percent">("flat");
   const [disc, setDisc] = useState("");
   const [vat, setVat] = useState(false);
@@ -63,7 +66,13 @@ function POS() {
   }, [products, q, cat]);
 
   const add = (p: Product) => {
-    const live = products.find((x) => x.id === p.id)!;
+    const live = products.find((x) => x.id === p.id);
+    if (!live) return false;
+    const existing = cartRef.current.find((item) => item.id === p.id);
+    if ((existing?.quantity ?? 0) + 1 > live.stock) {
+      toast.error(live.stock <= 0 ? t.pos.outOfStock : t.pos.stockLimit);
+      return false;
+    }
     setCart((c) => {
       const ex = c.find((i) => i.id === p.id);
       if ((ex?.quantity ?? 0) + 1 > live.stock) {
@@ -72,7 +81,56 @@ function POS() {
       }
       return ex ? c.map((i) => (i.id === p.id ? { ...i, quantity: i.quantity + 1 } : i)) : [...c, { ...live, quantity: 1, discount: 0 }];
     });
+    return true;
   };
+  const addRef = useRef(add);
+  addRef.current = add;
+  const productsRef = useRef(products);
+  productsRef.current = products;
+
+  useEffect(() => {
+    let buffer = "";
+    let lastAt = 0;
+    const onKeyDown = (event: KeyboardEvent) => {
+      const now = performance.now();
+      if (event.key === "Enter") {
+        const scanned = buffer.length >= 6 && now - lastAt < 50;
+        const code = buffer.trim();
+        buffer = "";
+        lastAt = 0;
+        if (!scanned) return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        const product = productsRef.current.find((item) =>
+          item.barcode === code || item.sku.toLowerCase() === code.toLowerCase(),
+        );
+        if (!product) {
+          toast.error(t.scanner.notFound);
+          return;
+        }
+        beep();
+        if (addRef.current(product)) {
+          setQ("");
+          setScanOpen(false);
+          toast.success(`${t.scanner.added}: ${pname(product)}`);
+        }
+        return;
+      }
+      if (event.key.length !== 1 || event.ctrlKey || event.altKey || event.metaKey) {
+        buffer = "";
+        lastAt = 0;
+        return;
+      }
+      if (!buffer || now - lastAt >= 50) {
+        buffer = event.key;
+      } else {
+        buffer += event.key;
+      }
+      lastAt = now;
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [pname, t.scanner.added, t.scanner.notFound]);
   const setQty = (id: string, qn: number) => {
     const live = products.find((x) => x.id === id)!;
     if (qn > live.stock) return toast.error(t.pos.stockLimit);
@@ -302,7 +360,20 @@ function POS() {
         <TabsContent value="cart">{cartPanel}</TabsContent>
       </Tabs>
 
-      <Scanner open={scanOpen} onOpenChange={setScanOpen} onHit={(p) => { add(p); toast.success(`${t.scanner.added}: ${pname(p)}`); }} />
+      <BarcodeScanner
+        open={scanOpen}
+        onOpenChange={setScanOpen}
+        onScan={(code) => {
+          const product = products.find((item) => item.barcode === code || item.sku.toLowerCase() === code.toLowerCase());
+          if (!product) {
+            toast.error(t.scanner.notFound);
+            return false;
+          }
+          if (!add(product)) return false;
+          toast.success(`${t.scanner.added}: ${pname(product)}`);
+          return true;
+        }}
+      />
 
       <Dialog open={!!done} onOpenChange={(o) => !o && setDone(null)}>
         <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
@@ -334,40 +405,3 @@ const Line = ({ k, v, strong }: { k: string; v: string; strong?: boolean }) => (
 const Pill = ({ children, onClick }: { children: React.ReactNode; onClick: () => void }) => (
   <button onClick={onClick} className="rounded-full border px-2.5 py-0.5 text-xs hover:bg-muted">{children}</button>
 );
-
-function Scanner({ open, onOpenChange, onHit }: { open: boolean; onOpenChange: (o: boolean) => void; onHit: (p: Product) => void }) {
-  const { t } = useI18n();
-  const products = useStore((s) => s.products);
-  const [code, setCode] = useState("");
-  const lookup = (c: string) => {
-    const p = products.find((x) => x.barcode === c.trim());
-    if (!p) return toast.error(t.scanner.notFound);
-    beep();
-    onHit(p);
-    setCode("");
-  };
-  const simulate = () => {
-    const pool = products.filter((p) => p.stock > 0);
-    const p = pool[Math.floor(Math.random() * pool.length)];
-    if (p) lookup(p.barcode);
-  };
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
-        <DialogHeader><DialogTitle>{t.scanner.title}</DialogTitle></DialogHeader>
-        <div className="relative grid aspect-video place-items-center overflow-hidden rounded-md bg-scanner-bg">
-          <div className="relative h-32 w-56 rounded-lg border-2 border-dashed border-primary-foreground/60">
-            <div className="absolute inset-x-2 top-1/2 h-0.5 animate-scan bg-scanner-line shadow-[0_0_12px_var(--scanner-line)]" />
-          </div>
-          <span className="absolute bottom-2 text-xs text-primary-foreground/70">{t.scanner.hint}</span>
-        </div>
-        <Button onClick={simulate}><ScanLine className="size-4" />{t.scanner.simulate}</Button>
-        <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); lookup(code); }}>
-          <Input className="font-mono" placeholder={t.scanner.manual} value={code} onChange={(e) => setCode(e.target.value)} />
-          <Button type="submit" variant="outline">{t.common.add}</Button>
-        </form>
-        <Trash2 className="hidden" />
-      </DialogContent>
-    </Dialog>
-  );
-}

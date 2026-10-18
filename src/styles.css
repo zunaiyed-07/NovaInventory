@@ -187,12 +187,20 @@
 }
 
 .print-area { display: block; }
+.print-only { display: none; }
 @media print {
-  @page { margin: 6mm; }
+  @page { size: A4 portrait; margin: 12mm; }
   body[data-printing] * { visibility: hidden !important; }
   body[data-printing] .print-area,
   body[data-printing] .print-area * { visibility: visible !important; }
   body[data-printing] .print-area {
     position: fixed; left: 0; top: 0; background: white; color: black;
   }
+  body[data-printing] .print-area.print-only {
+    display: block !important; box-sizing: border-box; width: 100%; padding: 8mm; font-size: 10pt;
+  }
+  body[data-printing="monthly-report"] .print-area:not(#monthly-report),
+  body[data-printing="monthly-report"] .print-area:not(#monthly-report) * { visibility: hidden !important; }
+  body[data-printing="monthly-report"] #monthly-report,
+  body[data-printing="monthly-report"] #monthly-report * { visibility: visible !important; }
 }

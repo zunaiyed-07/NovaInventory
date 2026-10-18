@@ -33,7 +33,7 @@ function Settings() {
   const fileRef = useRef<HTMLInputElement>(null);
   const { canInstall, install } = useInstall();
 
-  const data = () => ({ products: st.products, customers: st.customers, sales: st.sales, shift: st.shift, shiftHistory: st.shiftHistory, vouchers: st.vouchers, settings: st.settings });
+  const data = () => ({ products: st.products, customers: st.customers, sales: st.sales, shift: st.shift, shiftHistory: st.shiftHistory, vouchers: st.vouchers, expenses: st.expenses, settings: st.settings });
   const stamp = new Date().toISOString().slice(0, 10);
 
   const sql = () => {
@@ -43,12 +43,14 @@ function Settings() {
       "CREATE TABLE customers (id TEXT PRIMARY KEY, name TEXT, phone TEXT, credit_limit NUMERIC, current_due NUMERIC, last_payment_date TIMESTAMP);",
       "CREATE TABLE sales (id TEXT PRIMARY KEY, invoice_no TEXT UNIQUE, ts TIMESTAMP, cashier TEXT, subtotal NUMERIC, tax NUMERIC, discount NUMERIC, total NUMERIC, payment_method TEXT, paid NUMERIC, due NUMERIC, customer_id TEXT, status TEXT);",
       "CREATE TABLE sale_items (sale_id TEXT, product_id TEXT, quantity NUMERIC, unit_price NUMERIC, discount NUMERIC, returned_qty NUMERIC);",
+      "CREATE TABLE business_expenses (id TEXT PRIMARY KEY, title TEXT, category TEXT, amount NUMERIC, date DATE, note TEXT);",
       ...st.products.map((p) => `INSERT INTO products VALUES (${[p.id, p.sku, p.barcode, p.name.en, p.name.bn, p.category, p.costPrice, p.sellingPrice, p.stock, p.minStockAlert, p.expiryDate, p.unit].map(sq).join(", ")});`),
       ...st.customers.map((c) => `INSERT INTO customers VALUES (${[c.id, c.name, c.phone, c.creditLimit, c.currentDue, c.lastPaymentDate].map(sq).join(", ")});`),
       ...st.sales.flatMap((s) => [
         `INSERT INTO sales VALUES (${[s.id, s.invoiceNo, s.timestamp, s.cashierName, s.subtotal, s.taxAmount, s.discountAmount, s.total, s.paymentMethod, s.paidAmount, s.dueAmount, s.customerId, s.status].map(sq).join(", ")});`,
         ...s.items.map((i) => `INSERT INTO sale_items VALUES (${[s.id, i.id, i.quantity, i.sellingPrice, i.discount, i.returnedQty ?? 0].map(sq).join(", ")});`),
       ]),
+      ...st.expenses.map((expense) => `INSERT INTO business_expenses VALUES (${[expense.id, expense.title, expense.category, expense.amount, expense.date, expense.note].map(sq).join(", ")});`),
     ];
     downloadFile(`nova-${stamp}.sql`, out.join("\n"), "application/sql");
   };

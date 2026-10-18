@@ -59,6 +59,15 @@ export interface PettyExpense {
   time: string;
 }
 
+export interface Expense {
+  id: string;
+  title: string;
+  category: "rent" | "salary" | "electricity" | "utilities" | "maintenance" | "other";
+  amount: number;
+  date: string;
+  note?: string;
+}
+
 export interface ShiftRegister {
   id: string;
   status: "open" | "closed";

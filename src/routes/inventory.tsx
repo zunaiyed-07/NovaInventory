@@ -1,11 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import JsBarcode from "jsbarcode";
-import { ArrowUpDown, Download, Pencil, Plus, Printer, Tag, Trash2, Upload } from "lucide-react";
+import { ArrowUpDown, Download, Pencil, Plus, Printer, ScanLine, Tag, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { useStore, isNearExpiry, stockState } from "@/lib/store";
 import { useI18n } from "@/lib/i18n";
 import { PageHeader, Panel, StockBadges } from "@/components/nova/ui";
+import { BarcodeScanner } from "@/components/nova/BarcodeScanner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -14,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { downloadFile, printArea } from "@/lib/download";
 import type { Product, Unit } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 export const Route = createFileRoute("/inventory")({
   validateSearch: (s: Record<string, unknown>) => ({ q: typeof s.q === "string" ? s.q : undefined }),
@@ -42,7 +44,8 @@ function Inventory() {
   const [tab, setTab] = useState<"all" | "low" | "expiry">("all");
   const [sort, setSort] = useState<{ k: SortKey; dir: 1 | -1 }>({ k: "name", dir: 1 });
   const [page, setPage] = useState(0);
-  const [edit, setEdit] = useState<Product | null | "new">(null);
+  const [isAddProductOpen, setIsAddProductOpen] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [labels, setLabels] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -96,7 +99,7 @@ function Inventory() {
           <Button variant="outline" size="sm" onClick={() => setLabels(true)}><Tag className="size-4" />{t.inv.labels}</Button>
           <Button variant="outline" size="sm" onClick={exportCsv}><Download className="size-4" />{t.inv.exportCsv}</Button>
           {admin && <Button variant="outline" size="sm" onClick={() => fileRef.current?.click()}><Upload className="size-4" />{t.inv.importCsv}</Button>}
-          {admin && <Button size="sm" onClick={() => setEdit("new")}><Plus className="size-4" />{t.inv.addProduct}</Button>}
+          {admin && <Button size="sm" onClick={() => { setEditingProduct(null); setIsAddProductOpen(true); }}><Plus className="size-4" />{t.inv.addProduct}</Button>}
           <input ref={fileRef} type="file" accept=".csv" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) importCsv(f); e.target.value = ""; }} />
         </>}
       />
@@ -129,7 +132,7 @@ function Inventory() {
                   {admin && <td className={cn("px-3 py-2.5 tabular", margin(p) > 0 ? "text-success" : "text-danger")}>{num(Math.round(margin(p) * 10) / 10)}%</td>}
                   <td className="px-3 py-2.5"><StockBadges p={p} /></td>
                   <td className="px-3 py-2.5 text-right whitespace-nowrap">
-                    <Button size="icon" variant="ghost" aria-label={t.common.edit} onClick={() => setEdit(p)}><Pencil className="size-4" /></Button>
+                    <Button size="icon" variant="ghost" aria-label={t.common.edit} onClick={() => { setEditingProduct(p); setIsAddProductOpen(true); }}><Pencil className="size-4" /></Button>
                     {admin && (
                       <Button size="icon" variant="ghost" aria-label={t.common.delete} onClick={() => { if (confirm(t.inv.confirmDelete)) { deleteProduct(p.id); toast.success(t.inv.deleted); } }}>
                         <Trash2 className="size-4 text-danger" />
@@ -148,7 +151,10 @@ function Inventory() {
           <Button size="sm" variant="outline" disabled={page >= pages - 1} onClick={() => setPage(page + 1)}>{t.common.next}</Button>
         </div>
       </Panel>
-      <ProductSheet value={edit} onClose={() => setEdit(null)} />
+      <ProductSheet
+        value={isAddProductOpen ? editingProduct ?? "new" : null}
+        onClose={() => { setIsAddProductOpen(false); setEditingProduct(null); }}
+      />
       <LabelSheet open={labels} onOpenChange={setLabels} products={rows} />
     </>
   );
@@ -157,10 +163,17 @@ function Inventory() {
 function ProductSheet({ value, onClose }: { value: Product | null | "new"; onClose: () => void }) {
   const { t, num } = useI18n();
   const { upsertProduct, role, products } = useStore();
+  const isMobile = useIsMobile();
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
   const blank: Product = { id: "", sku: "", barcode: "", name: { en: "", bn: "" }, category: "groceries", costPrice: 0, sellingPrice: 0, stock: 0, minStockAlert: 5, unit: "pcs" };
   const [f, setF] = useState<Product>(blank);
   const [err, setErr] = useState<Record<string, string>>({});
-  useEffect(() => { if (value) { setF(value === "new" ? { ...blank, id: crypto.randomUUID() } : value); setErr({}); } }, [value]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (value) {
+      setF(value === "new" ? { ...blank, id: crypto.randomUUID() } : value);
+      setErr({});
+    }
+  }, [value]); // eslint-disable-line react-hooks/exhaustive-deps
   const admin = role === "admin";
   const set = <K extends keyof Product>(k: K, v: Product[K]) => setF((x) => ({ ...x, [k]: v }));
   const save = () => {
@@ -179,16 +192,23 @@ function ProductSheet({ value, onClose }: { value: Product | null | "new"; onClo
     onClose();
   };
   const m = margin(f);
-  return (
-    <Sheet open={!!value} onOpenChange={(o) => !o && onClose()}>
-      <SheetContent className="overflow-y-auto">
-        <SheetHeader><SheetTitle>{value === "new" ? t.inv.addProduct : t.inv.editProduct}</SheetTitle></SheetHeader>
-        <div className="mt-4 space-y-3">
+  const title = value === "new" ? t.inv.addProduct : t.inv.editProduct;
+  const fields = (
+    <form className="mt-4 space-y-3" onSubmit={(event) => { event.preventDefault(); save(); }}>
           <F label={t.inv.nameEn} e={err.nameEn}><Input value={f.name.en} onChange={(e) => set("name", { ...f.name, en: e.target.value })} /></F>
           <F label={t.inv.nameBn}><Input value={f.name.bn} onChange={(e) => set("name", { ...f.name, bn: e.target.value })} /></F>
           <div className="grid grid-cols-2 gap-3">
             <F label={t.inv.sku} e={err.sku}><Input value={f.sku} onChange={(e) => set("sku", e.target.value.toUpperCase())} /></F>
-            <F label={t.inv.barcode} e={err.barcode}><Input value={f.barcode} onChange={(e) => set("barcode", e.target.value.replace(/\D/g, ""))} /></F>
+            <div className="block space-y-1">
+              <span className="text-xs text-muted-foreground">{t.inv.barcode}</span>
+              <div className="flex gap-1">
+                <Input aria-label={t.inv.barcode} value={f.barcode} onChange={(e) => set("barcode", e.target.value.replace(/\D/g, ""))} />
+                <Button type="button" variant="outline" size="icon" aria-label={t.pos.scan} onClick={() => setIsScannerOpen(true)}>
+                  <ScanLine className="size-4" />
+                </Button>
+              </div>
+              {err.barcode && <span className="text-xs text-danger">{err.barcode}</span>}
+            </div>
             <F label={t.inv.category}>
               <Select value={f.category} onValueChange={(v) => set("category", v)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
@@ -212,10 +232,38 @@ function ProductSheet({ value, onClose }: { value: Product | null | "new"; onClo
               {t.inv.marginPreview}: <b>{num(Math.round(m * 10) / 10)}%</b>
             </div>
           )}
-          <Button className="w-full" onClick={save}>{t.common.save}</Button>
-        </div>
+          <Button className="w-full" type="submit">{t.common.save}</Button>
+    </form>
+  );
+  const form = isMobile ? (
+    <Sheet open={!!value} onOpenChange={(open) => !open && onClose()}>
+      <SheetContent side="bottom" className="h-[90dvh] w-full max-w-none overflow-y-auto rounded-t-lg p-4">
+        <SheetHeader><SheetTitle>{title}</SheetTitle></SheetHeader>
+        {fields}
       </SheetContent>
     </Sheet>
+  ) : (
+    <Dialog open={!!value} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-h-[90dvh] max-w-2xl overflow-y-auto">
+        <DialogHeader><DialogTitle>{title}</DialogTitle></DialogHeader>
+        {fields}
+      </DialogContent>
+    </Dialog>
+  );
+
+  return (
+    <>
+      {form}
+      <BarcodeScanner
+        open={isScannerOpen}
+        onOpenChange={setIsScannerOpen}
+        onScan={(code) => {
+          set("barcode", code.replace(/\D/g, ""));
+          toast.success(t.inv.barcodeScanned);
+          return true;
+        }}
+      />
+    </>
   );
 }
 

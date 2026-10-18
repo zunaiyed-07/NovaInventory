@@ -140,7 +140,7 @@ function Dashboard() {
 
 function ShiftCard() {
   const { t, money, date } = useI18n();
-  const { shift, openShift, addExpense, closeShift, settings } = useStore();
+  const { shift, openShift, addPettyExpense, closeShift, settings } = useStore();
   const [opening, setOpening] = useState("3000");
   const [reason, setReason] = useState("");
   const [amt, setAmt] = useState("");
@@ -192,7 +192,7 @@ function ShiftCard() {
         onSubmit={(e) => {
           e.preventDefault();
           if (!reason.trim() || !(Number(amt) > 0)) return toast.error(t.common.invalid);
-          addExpense(reason.trim(), Number(amt));
+          addPettyExpense(reason.trim(), Number(amt));
           setReason(""); setAmt("");
         }}
       >
