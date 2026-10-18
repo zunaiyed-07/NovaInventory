@@ -8,3 +8,6 @@
 > Commits you push to the connected branch sync back to Lovable and show up in
 > the editor, so keep the branch in a working state.
 <!-- LOVABLE:END -->
+
+- App state lives in one persisted zustand store (src/lib/store.ts, localStorage, skipHydration + rehydrate in Providers) — no backend yet, so the client gate avoids SSR hydration mismatches.
+- All UI strings come from src/locales/en.ts and bn.ts via useI18n(); bn is typed against en so missing keys fail typecheck.
