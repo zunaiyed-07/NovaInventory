@@ -73,7 +73,7 @@
 
 :root {
   --radius: 0.5rem;
-  --font-sans: "Geist", "Hind Siliguri", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Geist", "Noto Sans Bengali", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "Geist Mono", ui-monospace, monospace;
   --background: oklch(0.985 0.002 260);
   --foreground: oklch(0.21 0.006 285);
