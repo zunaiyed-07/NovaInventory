@@ -1,24 +1,98 @@
-# Pixel Perfect App
+# NovaInventory
 
-Implement exactly the screenshot and nothing else
+**A bilingual point-of-sale and inventory platform for independent retailers.**
 
-This project was built with [Lovable](https://lovable.dev).
+NovaInventory brings checkout, stock control, customer credit, shift reconciliation, barcode scanning, and monthly business reporting together in a responsive application designed for everyday shop operations.
 
-## Build with Lovable
+> **Data storage:** Application data is stored in the browser using LocalStorage. There is currently no server-side database or automatic synchronization between devices. Export regular backups from **Settings → Backup & portability**.
 
-Continue developing this project in the [Lovable editor](https://lovable.dev/projects/3ca48afd-98d9-4631-9299-35703ca024cb).
+## Features
 
-- **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: every change made in Lovable is committed straight to this repository.
-- **Full ownership**: this code is yours. Push to `main` on GitHub and your changes sync back into Lovable, ready for your next prompt.
+- **Point of sale:** Product catalog, cart, discounts, VAT, cash/card/mobile financial service payments, credit sales, customer balances, receipts, and return-aware stock updates.
+- **Barcode scanning:** Live camera scanning for barcodes and QR codes, manual barcode/SKU entry, and support for USB or Bluetooth scanners that type into the POS.
+- **Inventory management:** Product catalog, bilingual product names, SKU and barcode records, cost and selling prices, stock alerts, expiry tracking, printable labels, and CSV import/export.
+- **Customer credit (Baki Khata):** Customer balances, credit limits, repayment records, and WhatsApp reminders.
+- **Shift register:** Opening and closing cash, petty expenses, drawer reconciliation, and printable reconciliation slips.
+- **Expenses and monthly profit & loss:** Record operating expenses, review monthly sales revenue, cost of goods sold, gross profit, expenses and net profit/loss, and print a monthly statement.
+- **Sales returns:** Look up invoices, process partial or full returns, and issue cash refunds or store-credit vouchers.
+- **English and Bengali:** Switch between English and বাংলা throughout the application.
+- **Light and dark themes:** Switch themes without losing the existing interface preferences.
+- **Installable app:** Progressive Web App support for adding NovaInventory to a compatible device.
+- **Local backup and portability:** Export or restore the application data in JSON format.
 
-## Development
+## Technology
 
-Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
+- React 19 and TypeScript
+- TanStack Start and TanStack Router
+- Tailwind CSS and Radix UI components
+- Zustand with LocalStorage persistence
+- Recharts for financial visualizations
+- `html5-qrcode` for camera-based barcode and QR scanning
+- Vitest for tests
 
-```sh
-git clone <this-repository-url>
-cd <repository-name>
-npm i
+## Getting started
+
+### Requirements
+
+- Node.js 20.19 or later (or 22.12 or later)
+- npm
+
+### Install and run
+
+```bash
+git clone https://github.com/zunaiyed-07/NovaInventory.git
+cd NovaInventory
+npm install
 npm run dev
 ```
+
+Open the local URL printed by Vite, typically `http://localhost:8080`.
+
+## Available commands
+
+| Command | Description |
+| --- | --- |
+| `npm run dev` | Start the local development server. |
+| `npm run build` | Create a production build. |
+| `npm run build:dev` | Create a development-mode build. |
+| `npm run preview` | Preview the production build locally. |
+| `npm test` | Run the test suite once. |
+| `npm run test:watch` | Run tests in watch mode. |
+| `npm run lint` | Run ESLint. |
+
+## Camera scanning
+
+Camera access requires a **secure context**: use `localhost` during development or deploy the application over HTTPS. When the scanner opens, allow camera access in the browser. On mobile devices the scanner prefers the rear-facing camera.
+
+If a camera is unavailable or permission is declined, enter a barcode or SKU manually. A USB or Bluetooth barcode reader can also be used at the POS; most scanners send the scanned value as keystrokes followed by Enter.
+
+## Data, backups, and privacy
+
+NovaInventory persists its store data in the browser on the current device. Clearing the browser's site data removes that local copy. Back up important records regularly using **Settings → Backup & portability → Export JSON database**. Use the JSON import option to restore a backup.
+
+Camera access is only requested when the scanner is opened. Camera scanning is processed by the browser; the application does not upload scanned images to a NovaInventory server.
+
+## Project structure
+
+```text
+src/
+├── components/   Shared application and UI components
+├── hooks/        Reusable React hooks
+├── lib/          Store, domain types, localization helpers, and utilities
+├── locales/      English and Bengali translations
+├── routes/       File-based TanStack Start pages
+└── test/         Automated tests
+```
+
+The application state and persistence are managed in `src/lib/store.ts`. Route files in `src/routes/` define the application pages; `src/routeTree.gen.ts` is generated by TanStack Router and should not be edited manually.
+
+## Contributing
+
+1. Create a focused branch for your change.
+2. Keep user-facing text in both `src/locales/en.ts` and `src/locales/bn.ts`.
+3. Run the relevant tests and a production build before opening a pull request.
+4. Include a concise description of the behavior changed and any validation performed.
+
+## License
+
+No license is currently specified. Contact the repository owner regarding usage and redistribution.
