@@ -75,6 +75,7 @@ const currentMonth = () => {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 };
+const finiteAmount = (value: number) => (Number.isFinite(value) ? value : 0);
 const saleMonth = (timestamp: string) => {
   const date = new Date(timestamp);
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
@@ -90,8 +91,7 @@ function Reports() {
   const [month, setMonth] = useState(currentMonth);
   const [isExpenseOpen, setIsExpenseOpen] = useState(false);
   const monthlySales = useMemo(
-    () =>
-      sales.filter((sale) => sale.status === "completed" && saleMonth(sale.timestamp) === month),
+    () => sales.filter((sale) => sale.status !== "returned" && saleMonth(sale.timestamp) === month),
     [sales, month],
   );
   const monthlyExpenses = useMemo(
@@ -101,19 +101,28 @@ function Reports() {
         .sort((a, b) => b.date.localeCompare(a.date)),
     [expenses, month],
   );
-  const totalSales = monthlySales.reduce((sum, sale) => sum + sale.total, 0);
+  const totalSales = monthlySales.reduce(
+    (sum, sale) =>
+      sum + Math.max(0, finiteAmount(sale.total) - finiteAmount(sale.refundedAmount ?? 0)),
+    0,
+  );
   const cogs = monthlySales.reduce(
     (sum, sale) =>
       sum +
       sale.items.reduce(
         (itemsTotal, item) =>
-          itemsTotal + item.costPrice * (item.quantity - (item.returnedQty ?? 0)),
+          itemsTotal +
+          finiteAmount(item.costPrice) *
+            Math.max(0, finiteAmount(item.quantity) - finiteAmount(item.returnedQty ?? 0)),
         0,
       ),
     0,
   );
   const grossProfit = totalSales - cogs;
-  const totalExpenses = monthlyExpenses.reduce((sum, expense) => sum + expense.amount, 0);
+  const totalExpenses = monthlyExpenses.reduce(
+    (sum, expense) => sum + finiteAmount(expense.amount),
+    0,
+  );
   const netProfit = grossProfit - totalExpenses;
   const monthName = new Intl.DateTimeFormat(lang === "bn" ? "bn-BD" : "en-US", {
     month: "long",
@@ -135,7 +144,7 @@ function Reports() {
         .filter((expense) => expense.category === category)
         .reduce((sum, expense) => sum + expense.amount, 0),
     }))
-    .filter((item) => item.value > 0);
+    .filter((item) => item.value > 0 && Number.isFinite(item.value));
 
   const kpis = [
     {

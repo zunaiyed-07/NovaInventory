@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { Html5Qrcode } from "html5-qrcode";
-import { toast } from "sonner";
 import { useI18n } from "@/lib/i18n";
 import { beep } from "@/lib/download";
 import { Button } from "@/components/ui/button";
@@ -49,14 +48,33 @@ export function BarcodeScanner({
     setCameraError("");
     setCameraStarting(true);
     const showCameraError = (error: unknown) => {
-      const message = error instanceof Error ? `${error.name} ${error.message}` : String(error);
-      if (/notallowed|permission|denied|security/i.test(message))
-        setCameraError(t.scanner.permissionDenied);
-      else if (/notfound|no camera|device.*not found/i.test(message))
+      const name = error instanceof Error ? error.name : "";
+      const message =
+        `${name} ${error instanceof Error ? error.message : String(error)}`.toLowerCase();
+      if (/notallowed|permission|denied/.test(message)) setCameraError(t.scanner.permissionDenied);
+      else if (/notfound|no camera|device.*not found/.test(message))
         setCameraError(t.scanner.noCamera);
+      else if (name === "NotReadableError" || /notreadable|trackstart/.test(message))
+        setCameraError(t.scanner.cameraInUse);
+      else if (/securityerror|secure context|media devices not supported/.test(message))
+        setCameraError(t.scanner.secureContext);
       else setCameraError(t.scanner.cameraError);
       setCameraStarting(false);
     };
+    if (!window.isSecureContext) {
+      setCameraError(t.scanner.secureContext);
+      setCameraStarting(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setCameraError(t.scanner.unsupported);
+      setCameraStarting(false);
+      return () => {
+        cancelled = true;
+      };
+    }
     const startTimer = setTimeout(() => {
       if (cancelled) return;
       try {
@@ -66,7 +84,14 @@ export function BarcodeScanner({
         void activeScanner
           .start(
             { facingMode: { ideal: "environment" } },
-            { fps: 10, qrbox: { width: 250, height: 150 }, aspectRatio: 16 / 9 },
+            {
+              fps: 10,
+              qrbox: (width, height) => ({
+                width: Math.max(1, Math.min(250, Math.floor(width * 0.85))),
+                height: Math.max(1, Math.min(150, Math.floor(height * 0.7))),
+              }),
+              aspectRatio: 16 / 9,
+            },
             (decodedText) => {
               if (!cancelled) handleScan(decodedText);
             },
@@ -104,7 +129,15 @@ export function BarcodeScanner({
         scanner.clear();
       }
     };
-  }, [open, t.scanner.cameraError, t.scanner.noCamera, t.scanner.permissionDenied]);
+  }, [
+    open,
+    t.scanner.cameraError,
+    t.scanner.cameraInUse,
+    t.scanner.noCamera,
+    t.scanner.permissionDenied,
+    t.scanner.secureContext,
+    t.scanner.unsupported,
+  ]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

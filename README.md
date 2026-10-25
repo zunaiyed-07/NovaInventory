@@ -4,7 +4,7 @@
 
 NovaInventory brings checkout, stock control, customer credit, shift reconciliation, barcode scanning, and monthly business reporting together in a responsive application designed for everyday shop operations.
 
-> **Data storage:** Application data is stored in the browser using LocalStorage. There is currently no server-side database or automatic synchronization between devices. Export regular backups from **Settings → Backup & portability**.
+> **Data storage:** The laptop runs a local JSON-file server, and devices connected to the same Wi-Fi share that data. Browser LocalStorage remains as an offline fallback. No cloud service is used.
 
 ## Features
 
@@ -26,6 +26,7 @@ NovaInventory brings checkout, stock control, customer credit, shift reconciliat
 - TanStack Start and TanStack Router
 - Tailwind CSS and Radix UI components
 - Zustand with LocalStorage persistence
+- Local Express JSON-file API with LAN polling synchronization
 - Recharts for financial visualizations
 - `html5-qrcode` for camera-based barcode and QR scanning
 - Vitest for tests
@@ -43,16 +44,31 @@ NovaInventory brings checkout, stock control, customer credit, shift reconciliat
 git clone https://github.com/zunaiyed-07/NovaInventory.git
 cd NovaInventory
 npm install
-npm run dev
+npm run start:all
 ```
 
-Open the local URL printed by Vite, typically `http://localhost:8080`.
+Open the local URL printed by Vite on the laptop. To use another device, connect it to the same Wi-Fi and open that URL using the laptop's local IP address (for example, `http://192.168.0.10:8080`). If Windows Firewall prompts, allow Node.js on private networks. Keep `npm run start:all` running while using shared devices.
+
+### Enable camera scanning on the LAN
+
+Browsers only allow camera access on secure origins. `http://localhost:8080` works on the laptop, but `http://<laptop-LAN-IP>:8080` does not. Install [mkcert](https://github.com/FiloSottile/mkcert) on the laptop, connect it to the same Wi-Fi as the other devices, then run:
+
+```bash
+npm run https:setup
+npm run start:all
+```
+
+The setup command creates a local certificate for the laptop's current Wi-Fi IP and trusts its local certificate authority on the laptop. Securely transfer mkcert's `rootCA.pem` to each phone/tablet (the setup command prints its location) and install it as a trusted CA certificate in the device's security settings. On iPhone/iPad, also enable full trust under **Settings → General → About → Certificate Trust Settings**. Then open the `https://<laptop-LAN-IP>:8080` address shown by Vite. If the laptop changes networks or its LAN IP changes, rerun `npm run https:setup`. Certificate trust is required on every device; dismissing a certificate warning may not enable camera access.
+
+The Express API runs on the laptop at `127.0.0.1:3001`; Vite proxies API requests from connected browsers. The API is not directly exposed on the Wi-Fi network. Shared application data is stored in the ignored `data/store.json` file on the laptop. Polling updates other devices automatically, while LocalStorage keeps the app usable if the server or Wi-Fi is temporarily unavailable.
 
 ## Available commands
 
 | Command | Description |
 | --- | --- |
 | `npm run dev` | Start the local development server. |
+| `npm run server` | Start the local JSON API server. |
+| `npm run start:all` | Start the API and LAN-accessible Vite server together. |
 | `npm run build` | Create a production build. |
 | `npm run build:dev` | Create a development-mode build. |
 | `npm run preview` | Preview the production build locally. |
@@ -62,19 +78,20 @@ Open the local URL printed by Vite, typically `http://localhost:8080`.
 
 ## Camera scanning
 
-Camera access requires a **secure context**: use `localhost` during development or deploy the application over HTTPS. When the scanner opens, allow camera access in the browser. On mobile devices the scanner prefers the rear-facing camera.
+Camera access requires a **secure context**: use `localhost` on the laptop or follow the LAN HTTPS setup above. When the scanner opens, allow camera access in the browser. On mobile devices the scanner prefers the rear-facing camera.
 
 If a camera is unavailable or permission is declined, enter a barcode or SKU manually. A USB or Bluetooth barcode reader can also be used at the POS; most scanners send the scanned value as keystrokes followed by Enter.
 
 ## Data, backups, and privacy
 
-NovaInventory persists its store data in the browser on the current device. Clearing the browser's site data removes that local copy. Back up important records regularly using **Settings → Backup & portability → Export JSON database**. Use the JSON import option to restore a backup.
+The laptop's local JSON file is the shared source of truth whenever it is reachable. Each browser also persists a copy in LocalStorage for offline use; edits made while disconnected are synchronized when the server becomes reachable again. Back up important records regularly using **Settings → Backup & portability → Export JSON database**. Use the JSON import option to restore a backup.
 
-Camera access is only requested when the scanner is opened. Camera scanning is processed by the browser; the application does not upload scanned images to a NovaInventory server.
+Camera access is only requested when the scanner is opened. Camera scanning is processed by the browser; the application does not upload scanned images to a NovaInventory server. Application assets and fonts are served locally without a cloud dependency.
 
 ## Project structure
 
 ```text
+server/         Local Express API and JSON-file persistence
 src/
 ├── components/   Shared application and UI components
 ├── hooks/        Reusable React hooks
@@ -84,7 +101,7 @@ src/
 └── test/         Automated tests
 ```
 
-The application state and persistence are managed in `src/lib/store.ts`. Route files in `src/routes/` define the application pages; `src/routeTree.gen.ts` is generated by TanStack Router and should not be edited manually.
+The application state and browser persistence are managed in `src/lib/store.ts`; LAN synchronization is handled by `src/lib/sync.ts`. The server stores the shared state under the ignored `data/store.json` file. Route files in `src/routes/` define the application pages; `src/routeTree.gen.ts` is generated by TanStack Router and should not be edited manually.
 
 ## Contributing
 

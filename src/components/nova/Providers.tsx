@@ -3,6 +3,7 @@ import { useStore } from "@/lib/store";
 import { I18nProvider } from "@/lib/i18n";
 import { AppShell } from "./AppShell";
 import { Toaster } from "@/components/ui/sonner";
+import { startSync } from "@/lib/sync";
 
 export function Providers({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
@@ -10,11 +11,26 @@ export function Providers({ children }: { children: ReactNode }) {
   const lang = useStore((s) => s.lang);
 
   useEffect(() => {
-    Promise.resolve(useStore.persist.rehydrate()).then(() => setReady(true));
+    let active = true;
+    let stopSync: (() => void) | undefined;
+    Promise.resolve(useStore.persist.rehydrate())
+      .then(() => {
+        if (!active) return;
+        stopSync = startSync();
+        setReady(true);
+      })
+      .catch((error: unknown) => {
+        console.error("Unable to load saved application data.", error);
+        if (active) setReady(true);
+      });
     const inFrame = window.self !== window.top;
     if ("serviceWorker" in navigator && import.meta.env.PROD && !inFrame) {
       navigator.serviceWorker.register("/sw.js").catch(() => {});
     }
+    return () => {
+      active = false;
+      stopSync?.();
+    };
   }, []);
 
   useEffect(() => {

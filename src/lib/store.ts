@@ -1,9 +1,26 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import type {
-  CartItem, CustomerLedger, Expense, Lang, PaymentMethod, Product, Role, SaleTransaction, ShiftRegister, StoreSettings, Voucher,
+  CartItem,
+  CustomerLedger,
+  Expense,
+  Lang,
+  PaymentMethod,
+  Product,
+  Role,
+  SaleTransaction,
+  ShiftRegister,
+  StoreSettings,
+  Voucher,
 } from "./types";
-import { defaultSettings, mockCustomers, mockExpenses, mockProducts, mockSales, mockShift } from "./mock";
+import {
+  defaultSettings,
+  mockCustomers,
+  mockExpenses,
+  mockProducts,
+  mockSales,
+  mockShift,
+} from "./mock";
 
 const uid = () => Math.random().toString(36).slice(2, 10);
 
@@ -21,7 +38,7 @@ export interface CheckoutInput {
   voucherCode?: string;
 }
 
-interface Data {
+export interface Data {
   products: Product[];
   customers: CustomerLedger[];
   sales: SaleTransaction[];
@@ -43,7 +60,11 @@ interface State extends Data {
   deleteProduct: (id: string) => void;
   importProducts: (ps: Product[]) => void;
   checkout: (i: CheckoutInput) => SaleTransaction;
-  processReturn: (saleId: string, lines: Record<string, number>, mode: "cash" | "voucher") => { amount: number; voucher?: string };
+  processReturn: (
+    saleId: string,
+    lines: Record<string, number>,
+    mode: "cash" | "voucher",
+  ) => { amount: number; voucher?: string };
   addCustomer: (c: Omit<CustomerLedger, "id" | "currentDue">) => void;
   recordRepayment: (customerId: string, amount: number) => void;
   openShift: (openingCash: number) => void;
@@ -53,12 +74,19 @@ interface State extends Data {
   closeShift: (actualCash: number) => ShiftRegister | null;
   setSettings: (s: StoreSettings) => void;
   restore: (d: Partial<Data>) => void;
+  syncData: (d: Data) => void;
   resetData: () => void;
 }
 
 const seed = (): Data => ({
-  products: mockProducts, customers: mockCustomers, sales: mockSales, shift: mockShift(),
-  shiftHistory: [], vouchers: [], expenses: mockExpenses, settings: defaultSettings,
+  products: mockProducts,
+  customers: mockCustomers,
+  sales: mockSales,
+  shift: mockShift(),
+  shiftHistory: [],
+  vouchers: [],
+  expenses: mockExpenses,
+  settings: defaultSettings,
 });
 
 export const useStore = create<State>()(
@@ -73,35 +101,97 @@ export const useStore = create<State>()(
       setTheme: (theme) => set({ theme }),
       upsertProduct: (p) =>
         set((s) => ({
-          products: s.products.some((x) => x.id === p.id) ? s.products.map((x) => (x.id === p.id ? p : x)) : [p, ...s.products],
+          products: s.products.some((x) => x.id === p.id)
+            ? s.products.map((x) => (x.id === p.id ? p : x))
+            : [p, ...s.products],
         })),
       deleteProduct: (id) => set((s) => ({ products: s.products.filter((p) => p.id !== id) })),
       importProducts: (ps) =>
         set((s) => {
           const bySku = new Map(s.products.map((p) => [p.sku, p]));
-          ps.forEach((p) => bySku.set(p.sku, { ...(bySku.get(p.sku) ?? {}), ...p, id: bySku.get(p.sku)?.id ?? p.id }));
+          ps.forEach((p) =>
+            bySku.set(p.sku, {
+              ...(bySku.get(p.sku) ?? {}),
+              ...p,
+              id: bySku.get(p.sku)?.id ?? p.id,
+            }),
+          );
           return { products: [...bySku.values()] };
         }),
       checkout: (i) => {
         const s = get();
-        const n = s.sales.reduce((m, x) => Math.max(m, Number(x.invoiceNo.split("-")[1]) || 0), 1000) + 1;
+        const qty = new Map<string, number>();
+        for (const item of i.items) {
+          if (
+            ![item.quantity, item.sellingPrice, item.costPrice, item.discount].every(
+              Number.isFinite,
+            ) ||
+            item.quantity <= 0 ||
+            item.sellingPrice < 0 ||
+            item.costPrice < 0 ||
+            item.discount < 0 ||
+            item.discount > 100
+          ) {
+            throw new Error("invalid_checkout");
+          }
+          qty.set(item.id, (qty.get(item.id) ?? 0) + item.quantity);
+        }
+        for (const [id, quantity] of qty) {
+          const product = s.products.find((item) => item.id === id);
+          if (!product || !Number.isFinite(product.stock) || product.stock < quantity) {
+            throw new Error("insufficient_stock");
+          }
+        }
+        if (
+          ![i.subtotal, i.discountAmount, i.taxAmount, i.total, i.paidAmount].every(
+            Number.isFinite,
+          ) ||
+          i.subtotal < 0 ||
+          i.discountAmount < 0 ||
+          i.discountAmount > i.subtotal ||
+          i.taxAmount < 0 ||
+          i.total < 0 ||
+          i.paidAmount < 0
+        ) {
+          throw new Error("invalid_checkout");
+        }
+        const saleId = uid();
+        const timestamp = new Date().toISOString();
         const sale: SaleTransaction = {
-          id: uid(), invoiceNo: `INV-${n}`, timestamp: new Date().toISOString(), cashierName: s.settings.cashierName,
-          items: i.items.map((x) => ({ ...x, returnedQty: 0 })), subtotal: i.subtotal, taxAmount: i.taxAmount,
-          discountAmount: i.discountAmount, total: i.total, paymentMethod: i.paymentMethod,
-          paidAmount: Math.min(i.paidAmount, i.total), dueAmount: Math.max(0, i.total - i.paidAmount),
-          customerId: i.customerId, mfsProvider: i.mfsProvider, mfsTxId: i.mfsTxId, status: "completed",
+          id: saleId,
+          invoiceNo: `INV-${Date.now()}-${saleId.toUpperCase()}`,
+          timestamp,
+          cashierName: s.settings.cashierName,
+          items: i.items.map((x) => ({ ...x, returnedQty: 0 })),
+          subtotal: i.subtotal,
+          taxAmount: i.taxAmount,
+          discountAmount: i.discountAmount,
+          total: i.total,
+          paymentMethod: i.paymentMethod,
+          paidAmount: Math.min(i.paidAmount, i.total),
+          dueAmount: Math.max(0, i.total - i.paidAmount),
+          customerId: i.customerId,
+          mfsProvider: i.mfsProvider,
+          mfsTxId: i.mfsTxId,
+          status: "completed",
         };
-        const qty = new Map(i.items.map((x) => [x.id, x.quantity]));
-        const cashIn = i.paymentMethod === "cash" || i.paymentMethod === "credit" ? sale.paidAmount : 0;
+        const cashIn =
+          i.paymentMethod === "cash" || i.paymentMethod === "credit" ? sale.paidAmount : 0;
         set({
           sales: [sale, ...s.sales],
-          products: s.products.map((p) => (qty.has(p.id) ? { ...p, stock: Math.max(0, p.stock - qty.get(p.id)!) } : p)),
-          customers: sale.dueAmount > 0 && i.customerId
-            ? s.customers.map((c) => (c.id === i.customerId ? { ...c, currentDue: c.currentDue + sale.dueAmount } : c))
-            : s.customers,
+          products: s.products.map((p) =>
+            qty.has(p.id) ? { ...p, stock: p.stock - qty.get(p.id)! } : p,
+          ),
+          customers:
+            sale.dueAmount > 0 && i.customerId
+              ? s.customers.map((c) =>
+                  c.id === i.customerId ? { ...c, currentDue: c.currentDue + sale.dueAmount } : c,
+                )
+              : s.customers,
           shift: s.shift ? { ...s.shift, expectedCash: s.shift.expectedCash + cashIn } : s.shift,
-          vouchers: i.voucherCode ? s.vouchers.map((v) => (v.code === i.voucherCode ? { ...v, used: true } : v)) : s.vouchers,
+          vouchers: i.voucherCode
+            ? s.vouchers.map((v) => (v.code === i.voucherCode ? { ...v, used: true } : v))
+            : s.vouchers,
         });
         return sale;
       },
@@ -121,41 +211,92 @@ export const useStore = create<State>()(
         const voucher = mode === "voucher" ? `VC-${uid().toUpperCase().slice(0, 6)}` : undefined;
         set({
           sales: s.sales.map((x) =>
-            x.id === saleId ? { ...x, items, status: allBack ? "returned" : "partial-return", refundedAmount: (x.refundedAmount ?? 0) + amount } : x,
+            x.id === saleId
+              ? {
+                  ...x,
+                  items,
+                  status: allBack ? "returned" : "partial-return",
+                  refundedAmount: (x.refundedAmount ?? 0) + amount,
+                }
+              : x,
           ),
-          products: s.products.map((p) => (lines[p.id] ? { ...p, stock: p.stock + (lines[p.id] ?? 0) } : p)),
-          shift: mode === "cash" && s.shift ? { ...s.shift, expectedCash: s.shift.expectedCash - amount } : s.shift,
-          vouchers: voucher ? [{ code: voucher, amount, createdAt: new Date().toISOString(), used: false }, ...s.vouchers] : s.vouchers,
+          products: s.products.map((p) =>
+            lines[p.id] ? { ...p, stock: p.stock + (lines[p.id] ?? 0) } : p,
+          ),
+          shift:
+            mode === "cash" && s.shift
+              ? { ...s.shift, expectedCash: s.shift.expectedCash - amount }
+              : s.shift,
+          vouchers: voucher
+            ? [
+                { code: voucher, amount, createdAt: new Date().toISOString(), used: false },
+                ...s.vouchers,
+              ]
+            : s.vouchers,
         });
         return { amount, voucher };
       },
-      addCustomer: (c) => set((s) => ({ customers: [{ ...c, id: uid(), currentDue: 0 }, ...s.customers] })),
+      addCustomer: (c) =>
+        set((s) => ({ customers: [{ ...c, id: uid(), currentDue: 0 }, ...s.customers] })),
       recordRepayment: (id, amount) =>
         set((s) => ({
           customers: s.customers.map((c) =>
-            c.id === id ? { ...c, currentDue: Math.max(0, c.currentDue - amount), lastPaymentDate: new Date().toISOString() } : c,
+            c.id === id
+              ? {
+                  ...c,
+                  currentDue: Math.max(0, c.currentDue - amount),
+                  lastPaymentDate: new Date().toISOString(),
+                }
+              : c,
           ),
           shift: s.shift ? { ...s.shift, expectedCash: s.shift.expectedCash + amount } : s.shift,
         })),
       openShift: (openingCash) =>
-        set({ shift: { id: uid(), status: "open", openedAt: new Date().toISOString(), openingCash, pettyExpenses: [], expectedCash: openingCash } }),
+        set({
+          shift: {
+            id: uid(),
+            status: "open",
+            openedAt: new Date().toISOString(),
+            openingCash,
+            pettyExpenses: [],
+            expectedCash: openingCash,
+          },
+        }),
       addPettyExpense: (reason, amount) =>
         set((s) =>
           s.shift
-            ? { shift: { ...s.shift, expectedCash: s.shift.expectedCash - amount, pettyExpenses: [...s.shift.pettyExpenses, { id: uid(), reason, amount, time: new Date().toISOString() }] } }
+            ? {
+                shift: {
+                  ...s.shift,
+                  expectedCash: s.shift.expectedCash - amount,
+                  pettyExpenses: [
+                    ...s.shift.pettyExpenses,
+                    { id: uid(), reason, amount, time: new Date().toISOString() },
+                  ],
+                },
+              }
             : {},
         ),
-      addExpense: (expense) => set((s) => ({ expenses: [{ ...expense, id: uid() }, ...s.expenses] })),
-      deleteExpense: (id) => set((s) => ({ expenses: s.expenses.filter((expense) => expense.id !== id) })),
+      addExpense: (expense) =>
+        set((s) => ({ expenses: [{ ...expense, id: uid() }, ...s.expenses] })),
+      deleteExpense: (id) =>
+        set((s) => ({ expenses: s.expenses.filter((expense) => expense.id !== id) })),
       closeShift: (actualCash) => {
         const sh = get().shift;
         if (!sh) return null;
-        const closed: ShiftRegister = { ...sh, status: "closed", closedAt: new Date().toISOString(), actualCash, discrepancy: actualCash - sh.expectedCash };
+        const closed: ShiftRegister = {
+          ...sh,
+          status: "closed",
+          closedAt: new Date().toISOString(),
+          actualCash,
+          discrepancy: actualCash - sh.expectedCash,
+        };
         set((s) => ({ shift: null, shiftHistory: [closed, ...s.shiftHistory] }));
         return closed;
       },
       setSettings: (settings) => set({ settings }),
       restore: (d) => set({ ...d, expenses: d.expenses ?? mockExpenses }),
+      syncData: (data) => set(data),
       resetData: () => set(seed()),
     }),
     {
@@ -172,9 +313,11 @@ export const useStore = create<State>()(
 );
 
 export const isToday = (iso: string) => new Date(iso).toDateString() === new Date().toDateString();
-export const daysUntil = (ymd?: string) => (ymd ? Math.ceil((new Date(ymd).getTime() - Date.now()) / 86400000) : Infinity);
+export const daysUntil = (ymd?: string) =>
+  ymd ? Math.ceil((new Date(ymd).getTime() - Date.now()) / 86400000) : Infinity;
 export type StockState = "normal" | "low" | "out";
-export const stockState = (p: Product): StockState => (p.stock <= 0 ? "out" : p.stock <= p.minStockAlert ? "low" : "normal");
+export const stockState = (p: Product): StockState =>
+  p.stock <= 0 ? "out" : p.stock <= p.minStockAlert ? "low" : "normal";
 export const isNearExpiry = (p: Product) => daysUntil(p.expiryDate) <= 30;
 export const lineProfit = (it: CartItem) => {
   const q = it.quantity - (it.returnedQty ?? 0);
