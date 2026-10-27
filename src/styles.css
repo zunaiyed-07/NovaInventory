@@ -193,6 +193,15 @@
   animation: scan-line 1.8s ease-in-out infinite;
 }
 
+#nova-barcode-reader {
+  width: 100%;
+  height: 100%;
+}
+
+#nova-barcode-reader #qr-shaded-region {
+  display: none !important;
+}
+
 .print-area {
   display: block;
 }

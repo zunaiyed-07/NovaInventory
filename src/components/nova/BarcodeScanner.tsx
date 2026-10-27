@@ -1,10 +1,19 @@
 import { useEffect, useRef, useState } from "react";
-import { Html5Qrcode } from "html5-qrcode";
+import { Flashlight, FlashlightOff, ZoomIn } from "lucide-react";
+import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
 import { useI18n } from "@/lib/i18n";
 import { beep } from "@/lib/download";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+
+function isUnsupportedFacingMode(error: unknown) {
+  if (!(error instanceof Error)) return false;
+  return (
+    error.name === "OverconstrainedError" ||
+    /overconstrained|constraint.*facing.?mode|facing.?mode.*constraint/i.test(error.message)
+  );
+}
 
 export function BarcodeScanner({
   open,
@@ -19,9 +28,18 @@ export function BarcodeScanner({
   const [code, setCode] = useState("");
   const [cameraError, setCameraError] = useState("");
   const [cameraStarting, setCameraStarting] = useState(false);
+  const [scanFrame, setScanFrame] = useState({ width: 224, height: 128 });
+  const [zoomSupported, setZoomSupported] = useState(false);
+  const [torchSupported, setTorchSupported] = useState(false);
+  const [zoomed, setZoomed] = useState(false);
+  const [torchOn, setTorchOn] = useState(false);
+  const [controlsBusy, setControlsBusy] = useState(false);
+  const [cameraControlError, setCameraControlError] = useState("");
   const onScanRef = useRef(onScan);
   const onOpenChangeRef = useRef(onOpenChange);
   const handledRef = useRef(false);
+  const scannerRef = useRef<Html5Qrcode | null>(null);
+  const baseZoomRef = useRef(1);
   onScanRef.current = onScan;
   onOpenChangeRef.current = onOpenChange;
 
@@ -39,6 +57,12 @@ export function BarcodeScanner({
     if (!open) {
       setCameraStarting(false);
       setCode("");
+      setZoomSupported(false);
+      setTorchSupported(false);
+      setZoomed(false);
+      setTorchOn(false);
+      setControlsBusy(false);
+      setCameraControlError("");
       return;
     }
     let cancelled = false;
@@ -47,6 +71,7 @@ export function BarcodeScanner({
     handledRef.current = false;
     setCameraError("");
     setCameraStarting(true);
+    setControlsBusy(false);
     const showCameraError = (error: unknown) => {
       const name = error instanceof Error ? error.name : "";
       const message =
@@ -78,27 +103,72 @@ export function BarcodeScanner({
     const startTimer = setTimeout(() => {
       if (cancelled) return;
       try {
-        scanner = new Html5Qrcode("nova-barcode-reader", { verbose: false });
+        const formats = [
+          Html5QrcodeSupportedFormats.EAN_13,
+          Html5QrcodeSupportedFormats.EAN_8,
+          Html5QrcodeSupportedFormats.UPC_A,
+          Html5QrcodeSupportedFormats.UPC_E,
+          Html5QrcodeSupportedFormats.CODE_128,
+          Html5QrcodeSupportedFormats.CODE_39,
+          Html5QrcodeSupportedFormats.CODE_93,
+          Html5QrcodeSupportedFormats.ITF,
+          Html5QrcodeSupportedFormats.CODABAR,
+          Html5QrcodeSupportedFormats.QR_CODE,
+        ];
+        scanner = new Html5Qrcode("nova-barcode-reader", {
+          verbose: false,
+          formatsToSupport: formats,
+          useBarCodeDetectorIfSupported: true,
+        });
         starting = true;
         const activeScanner = scanner;
+        scannerRef.current = activeScanner;
+        const scanConfig = {
+          fps: 15,
+          disableFlip: true,
+          qrbox: (width: number, height: number) => {
+            const dimensions = {
+              width: Math.max(1, Math.min(420, Math.floor(width * 0.85))),
+              height: Math.max(1, Math.min(160, Math.floor(height * 0.45))),
+            };
+            setScanFrame(dimensions);
+            return dimensions;
+          },
+        };
+        const onDecoded = (decodedText: string) => {
+          if (!cancelled) handleScan(decodedText);
+        };
+        const updateCameraFeatures = () => {
+          try {
+            const capabilities = activeScanner.getRunningTrackCameraCapabilities();
+            const zoom = capabilities.zoomFeature();
+            const supportsTwoTimesZoom = zoom.isSupported() && zoom.max() >= 2;
+            setZoomSupported(supportsTwoTimesZoom);
+            if (supportsTwoTimesZoom) {
+              const currentZoom = zoom.value();
+              baseZoomRef.current =
+                currentZoom !== null && currentZoom < 2 ? currentZoom : Math.max(zoom.min(), 1);
+            }
+            setTorchSupported(capabilities.torchFeature().isSupported());
+          } catch (error) {
+            console.error("Unable to read barcode camera capabilities", error);
+            setZoomSupported(false);
+            setTorchSupported(false);
+          }
+        };
         void activeScanner
-          .start(
-            { facingMode: { ideal: "environment" } },
-            {
-              fps: 10,
-              qrbox: (width, height) => ({
-                width: Math.max(1, Math.min(250, Math.floor(width * 0.85))),
-                height: Math.max(1, Math.min(150, Math.floor(height * 0.7))),
-              }),
-              aspectRatio: 16 / 9,
-            },
-            (decodedText) => {
-              if (!cancelled) handleScan(decodedText);
-            },
-            () => {},
-          )
+          .start({ facingMode: "environment" }, scanConfig, onDecoded, () => {})
+          .catch(async (error: unknown) => {
+            if (cancelled || !isUnsupportedFacingMode(error)) throw error;
+            const cameras = await Html5Qrcode.getCameras();
+            const fallbackCamera =
+              cameras.find(({ label }) => /back|rear|environment/i.test(label)) ?? cameras[0];
+            if (!fallbackCamera) throw error;
+            return activeScanner.start(fallbackCamera.id, scanConfig, onDecoded, () => {});
+          })
           .then(() => {
             starting = false;
+            if (!cancelled) updateCameraFeatures();
             if (cancelled && activeScanner.isScanning) {
               void activeScanner
                 .stop()
@@ -119,6 +189,7 @@ export function BarcodeScanner({
     return () => {
       cancelled = true;
       clearTimeout(startTimer);
+      scannerRef.current = null;
       if (!scanner || starting) return;
       if (scanner.isScanning) {
         void scanner
@@ -145,19 +216,91 @@ export function BarcodeScanner({
         <DialogHeader>
           <DialogTitle>{t.scanner.title}</DialogTitle>
         </DialogHeader>
-        <div className="relative aspect-video overflow-hidden rounded-md bg-scanner-bg">
+        <div className="relative aspect-[4/3] overflow-hidden rounded-md bg-scanner-bg sm:aspect-video">
           <div
             id="nova-barcode-reader"
-            className="absolute inset-0 [&_video]:h-full [&_video]:w-full [&_video]:object-cover"
+            className="h-full w-full [&_video]:h-full [&_video]:w-full [&_video]:object-fill"
           />
           <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center">
-            <div className="relative h-32 w-56 rounded-lg border-2 border-dashed border-primary-foreground/80">
-              <div className="absolute inset-x-2 top-1/2 h-0.5 animate-scan bg-scanner-line shadow-[0_0_12px_var(--scanner-line)]" />
+            <div
+              className="relative box-border max-w-[85%] rounded-xl border-2 border-dashed border-white/90 shadow-[0_0_0_9999px_rgba(0,0,0,0.2)]"
+              style={{
+                width: scanFrame.width,
+                height: scanFrame.height,
+              }}
+            >
+              <div className="absolute inset-x-2 top-1/2 h-0.5 -translate-y-1/2 animate-scan bg-scanner-line shadow-[0_0_12px_var(--scanner-line)]" />
             </div>
           </div>
           <span className="absolute inset-x-2 bottom-2 z-10 text-center text-xs text-primary-foreground/90">
             {t.scanner.hint}
           </span>
+        </div>
+        <div className="flex items-center justify-center gap-3">
+          <Button
+            type="button"
+            variant={zoomed ? "default" : "outline"}
+            size="sm"
+            aria-label={zoomed ? t.scanner.zoomReset : t.scanner.zoomIn}
+            title={zoomSupported ? t.scanner.zoomIn : t.scanner.zoomUnavailable}
+            aria-pressed={zoomed}
+            disabled={!zoomSupported || cameraStarting || controlsBusy}
+            onClick={async () => {
+              const activeScanner = scannerRef.current;
+              if (!activeScanner || !zoomSupported || controlsBusy) return;
+              setControlsBusy(true);
+              setCameraControlError("");
+              try {
+                await activeScanner
+                  .getRunningTrackCameraCapabilities()
+                  .zoomFeature()
+                  .apply(zoomed ? baseZoomRef.current : 2);
+                setZoomed(!zoomed);
+              } catch (error) {
+                console.error("Unable to change barcode camera zoom", error);
+                setCameraControlError(t.scanner.cameraControlError);
+              } finally {
+                setControlsBusy(false);
+              }
+            }}
+          >
+            <ZoomIn className="mr-1 h-4 w-4" aria-hidden="true" />
+            {zoomed ? "1×" : "2×"}
+          </Button>
+          <Button
+            type="button"
+            variant={torchOn ? "default" : "outline"}
+            size="sm"
+            aria-label={torchOn ? t.scanner.flashOff : t.scanner.flashOn}
+            title={torchSupported ? t.scanner.flashOn : t.scanner.flashUnavailable}
+            aria-pressed={torchOn}
+            disabled={!torchSupported || cameraStarting || controlsBusy}
+            onClick={async () => {
+              const activeScanner = scannerRef.current;
+              if (!activeScanner || !torchSupported || controlsBusy) return;
+              setControlsBusy(true);
+              setCameraControlError("");
+              try {
+                await activeScanner
+                  .getRunningTrackCameraCapabilities()
+                  .torchFeature()
+                  .apply(!torchOn);
+                setTorchOn(!torchOn);
+              } catch (error) {
+                console.error("Unable to change barcode camera flash", error);
+                setCameraControlError(t.scanner.cameraControlError);
+              } finally {
+                setControlsBusy(false);
+              }
+            }}
+          >
+            {torchOn ? (
+              <FlashlightOff className="mr-1 h-4 w-4" aria-hidden="true" />
+            ) : (
+              <Flashlight className="mr-1 h-4 w-4" aria-hidden="true" />
+            )}
+            {torchOn ? t.scanner.flashOff : t.scanner.flashOn}
+          </Button>
         </div>
         {cameraStarting && (
           <p role="status" className="text-sm text-muted-foreground">
@@ -167,6 +310,11 @@ export function BarcodeScanner({
         {cameraError && (
           <p role="alert" className="rounded-md bg-danger-soft p-2 text-sm text-danger">
             {cameraError}
+          </p>
+        )}
+        {cameraControlError && (
+          <p role="alert" className="rounded-md bg-danger-soft p-2 text-sm text-danger">
+            {cameraControlError}
           </p>
         )}
         <form

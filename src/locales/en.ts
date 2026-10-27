@@ -166,6 +166,13 @@ export const en = {
       "The camera is already in use by another app. Close it there and reopen the scanner.",
     cameraError:
       "The camera could not be started. Check browser permissions or enter a barcode manually.",
+    zoomIn: "Zoom to 2×",
+    zoomReset: "Reset zoom",
+    zoomUnavailable: "2× zoom is not supported by this camera",
+    flashOn: "Flash on",
+    flashOff: "Flash off",
+    flashUnavailable: "Flash is not supported by this camera",
+    cameraControlError: "The camera could not apply that setting. Try again.",
   },
   reports: {
     title: "Business Expenses & Monthly P&L",
