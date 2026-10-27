@@ -10,7 +10,10 @@ export function ThermalReceipt({ sale }: { sale: SaleTransaction }) {
     <div className={`flex justify-between ${b ? "font-bold" : ""}`}><span>{k}</span><span>{v}</span></div>
   );
   return (
-    <div className="print-area mx-auto w-[80mm] max-w-full rounded-md border bg-card p-3 font-mono text-[11px] leading-relaxed">
+    <div
+      id="receipt"
+      className="print-area mx-auto w-[80mm] max-w-full rounded-md border bg-card p-3 font-mono text-[11px] leading-relaxed"
+    >
       <div className="text-center text-sm font-bold">{settings.storeName}</div>
       <div className="text-center">{settings.address}</div>
       <div className="text-center">{settings.phone}</div>

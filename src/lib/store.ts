@@ -7,6 +7,7 @@ import type {
   Lang,
   PaymentMethod,
   Product,
+  ProductCategory,
   Role,
   SaleTransaction,
   ShiftRegister,
@@ -14,6 +15,7 @@ import type {
   Voucher,
 } from "./types";
 import {
+  addDemoProducts,
   defaultSettings,
   mockCustomers,
   mockExpenses,
@@ -40,6 +42,7 @@ export interface CheckoutInput {
 
 export interface Data {
   products: Product[];
+  productCategories: ProductCategory[];
   customers: CustomerLedger[];
   sales: SaleTransaction[];
   shift: ShiftRegister | null;
@@ -56,6 +59,8 @@ interface State extends Data {
   setLang: (l: Lang) => void;
   setRole: (r: Role) => void;
   setTheme: (t: "light" | "dark") => void;
+  addProductCategory: (label: string) => string | undefined;
+  deleteProductCategory: (id: string) => boolean;
   upsertProduct: (p: Product) => void;
   deleteProduct: (id: string) => void;
   importProducts: (ps: Product[]) => void;
@@ -80,6 +85,7 @@ interface State extends Data {
 
 const seed = (): Data => ({
   products: mockProducts,
+  productCategories: [],
   customers: mockCustomers,
   sales: mockSales,
   shift: mockShift(),
@@ -99,6 +105,30 @@ export const useStore = create<State>()(
       setLang: (lang) => set({ lang }),
       setRole: (role) => set({ role }),
       setTheme: (theme) => set({ theme }),
+      addProductCategory: (label) => {
+        const cleanLabel = label.trim();
+        if (!cleanLabel) return undefined;
+        const existing = get().productCategories.find(
+          (category) => category.label.toLocaleLowerCase() === cleanLabel.toLocaleLowerCase(),
+        );
+        if (existing) return existing.id;
+        const category = { id: `custom-${crypto.randomUUID()}`, label: cleanLabel };
+        set((s) => ({ productCategories: [...s.productCategories, category] }));
+        return category.id;
+      },
+      deleteProductCategory: (id) => {
+        const state = get();
+        if (
+          !state.productCategories.some((category) => category.id === id) ||
+          state.products.some((product) => product.category === id)
+        ) {
+          return false;
+        }
+        set((s) => ({
+          productCategories: s.productCategories.filter((category) => category.id !== id),
+        }));
+        return true;
+      },
       upsertProduct: (p) =>
         set((s) => ({
           products: s.products.some((x) => x.id === p.id)
@@ -127,6 +157,7 @@ export const useStore = create<State>()(
               Number.isFinite,
             ) ||
             item.quantity <= 0 ||
+            (item.unit === "pcs" && !Number.isInteger(item.quantity)) ||
             item.sellingPrice < 0 ||
             item.costPrice < 0 ||
             item.discount < 0 ||
@@ -295,18 +326,28 @@ export const useStore = create<State>()(
         return closed;
       },
       setSettings: (settings) => set({ settings }),
-      restore: (d) => set({ ...d, expenses: d.expenses ?? mockExpenses }),
+      restore: (d) =>
+        set({
+          ...d,
+          productCategories: d.productCategories ?? [],
+          expenses: d.expenses ?? mockExpenses,
+        }),
       syncData: (data) => set(data),
       resetData: () => set(seed()),
     }),
     {
       name: "nova-inventory-v1",
-      version: 1,
+      version: 3,
       storage: createJSONStorage(() => localStorage),
       skipHydration: true,
       migrate: (persisted, version) => {
-        if (version < 1) return { ...(persisted as Partial<State>), expenses: mockExpenses };
-        return persisted as State;
+        const data = (persisted ?? {}) as Partial<State>;
+        return {
+          ...data,
+          products: addDemoProducts(data.products ?? []),
+          productCategories: data.productCategories ?? [],
+          expenses: version < 1 ? mockExpenses : (data.expenses ?? mockExpenses),
+        } as State;
       },
     },
   ),

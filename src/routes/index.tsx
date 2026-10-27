@@ -1,7 +1,24 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { AlertTriangle, Banknote, Lock, Plus, Printer, TrendingUp, Users, Wallet } from "lucide-react";
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import {
+  AlertTriangle,
+  Banknote,
+  Lock,
+  Plus,
+  Printer,
+  TrendingUp,
+  Users,
+  Wallet,
+} from "lucide-react";
 import { toast } from "sonner";
 import { useStore, isToday, lineProfit, stockState, isNearExpiry } from "@/lib/store";
 import { useI18n } from "@/lib/i18n";
@@ -18,9 +35,15 @@ export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
       { title: "Dashboard — NovaInventory" },
-      { name: "description", content: "Today's revenue, profit, dues, stock alerts and drawer cash at a glance." },
+      {
+        name: "description",
+        content: "Today's revenue, profit, dues, stock alerts and drawer cash at a glance.",
+      },
       { property: "og:title", content: "Dashboard — NovaInventory" },
-      { property: "og:description", content: "Today's revenue, profit, dues, stock alerts and drawer cash at a glance." },
+      {
+        property: "og:description",
+        content: "Today's revenue, profit, dues, stock alerts and drawer cash at a glance.",
+      },
     ],
   }),
   component: Dashboard,
@@ -33,8 +56,15 @@ function Dashboard() {
 
   const today = sales.filter((s) => isToday(s.timestamp));
   const revenue = today.reduce((a, s) => a + s.total - (s.refundedAmount ?? 0), 0);
-  const expensesToday = shift?.pettyExpenses.filter((e) => isToday(e.time)).reduce((a, e) => a + e.amount, 0) ?? 0;
-  const profit = today.reduce((a, s) => a + s.items.reduce((b, i) => b + lineProfit(i), 0) - s.discountAmount, 0) - expensesToday;
+  const expensesToday = admin
+    ? (shift?.pettyExpenses.filter((e) => isToday(e.time)).reduce((a, e) => a + e.amount, 0) ?? 0)
+    : 0;
+  const profit = admin
+    ? today.reduce(
+        (a, s) => a + s.items.reduce((b, i) => b + lineProfit(i), 0) - s.discountAmount,
+        0,
+      ) - expensesToday
+    : 0;
   const due = customers.reduce((a, c) => a + c.currentDue, 0);
   const alerts = products.filter((p) => stockState(p) !== "normal" || isNearExpiry(p));
 
@@ -46,17 +76,43 @@ function Dashboard() {
       return {
         day: d.toLocaleDateString(lang === "bn" ? "bn-BD" : "en-US", { weekday: "short" }),
         revenue: ds.reduce((a, s) => a + s.total - (s.refundedAmount ?? 0), 0),
-        profit: ds.reduce((a, s) => a + s.items.reduce((b, it) => b + lineProfit(it), 0) - s.discountAmount, 0),
+        ...(admin
+          ? {
+              profit: ds.reduce(
+                (a, s) => a + s.items.reduce((b, it) => b + lineProfit(it), 0) - s.discountAmount,
+                0,
+              ),
+            }
+          : {}),
       };
     });
-  }, [sales, lang]);
+  }, [sales, lang, admin]);
 
   const kpis = [
     { label: t.kpi.revenue, value: money(revenue), icon: TrendingUp, tone: "text-foreground" },
-    { label: t.kpi.profit, value: admin ? money(profit) : "••••", icon: Banknote, tone: profit >= 0 ? "text-success" : "text-danger", hidden: !admin },
+    ...(admin
+      ? [
+          {
+            label: t.kpi.profit,
+            value: money(profit),
+            icon: Banknote,
+            tone: profit >= 0 ? "text-success" : "text-danger",
+          },
+        ]
+      : []),
     { label: t.kpi.due, value: money(due), icon: Users, tone: "text-danger" },
-    { label: t.kpi.alerts, value: num(alerts.length), icon: AlertTriangle, tone: alerts.length ? "text-warning" : "text-foreground" },
-    { label: t.kpi.drawer, value: shift ? money(shift.expectedCash) : "—", icon: Wallet, tone: "text-foreground" },
+    {
+      label: t.kpi.alerts,
+      value: num(alerts.length),
+      icon: AlertTriangle,
+      tone: alerts.length ? "text-warning" : "text-foreground",
+    },
+    {
+      label: t.kpi.drawer,
+      value: shift ? money(shift.expectedCash) : "—",
+      icon: Wallet,
+      tone: "text-foreground",
+    },
   ];
 
   return (
@@ -69,15 +125,18 @@ function Dashboard() {
               {k.label}
               <k.icon className="size-3.5" />
             </div>
-            <div className={cn("mt-2 text-xl font-semibold tracking-tight tabular", k.tone)}>{k.value}</div>
-            {k.hidden && <div className="mt-1 text-[11px] text-muted-foreground">{t.dash.hiddenForCashier}</div>}
+            <div className={cn("mt-2 text-xl font-semibold tracking-tight tabular", k.tone)}>
+              {k.value}
+            </div>
           </Panel>
         ))}
       </div>
 
       <div className="mt-4 grid gap-4 lg:grid-cols-3">
         <Panel className="p-4 lg:col-span-2">
-          <div className="mb-3 text-sm font-medium">{t.dash.trend}</div>
+          <div className="mb-3 text-sm font-medium">
+            {admin ? t.dash.trend : t.dash.cashierTrend}
+          </div>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={chart} margin={{ left: 0, right: 8, top: 8 }}>
@@ -92,14 +151,49 @@ function Dashboard() {
                   </linearGradient>
                 </defs>
                 <CartesianGrid stroke="var(--border)" vertical={false} />
-                <XAxis dataKey="day" tickLine={false} axisLine={false} fontSize={11} stroke="var(--muted-foreground)" />
-                <YAxis tickLine={false} axisLine={false} fontSize={11} width={48} stroke="var(--muted-foreground)" tickFormatter={(v) => num(v)} />
-                <Tooltip
-                  contentStyle={{ background: "var(--popover)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }}
-                  formatter={(v: number, k: string) => [money(v), k === "revenue" ? t.dash.revenue : t.dash.profit]}
+                <XAxis
+                  dataKey="day"
+                  tickLine={false}
+                  axisLine={false}
+                  fontSize={11}
+                  stroke="var(--muted-foreground)"
                 />
-                <Area type="monotone" dataKey="revenue" stroke="var(--chart-1)" fill="url(#gr)" strokeWidth={2} />
-                {admin && <Area type="monotone" dataKey="profit" stroke="var(--chart-2)" fill="url(#gp)" strokeWidth={2} />}
+                <YAxis
+                  tickLine={false}
+                  axisLine={false}
+                  fontSize={11}
+                  width={48}
+                  stroke="var(--muted-foreground)"
+                  tickFormatter={(v) => num(v)}
+                />
+                <Tooltip
+                  contentStyle={{
+                    background: "var(--popover)",
+                    border: "1px solid var(--border)",
+                    borderRadius: 8,
+                    fontSize: 12,
+                  }}
+                  formatter={(v: number, k: string) => [
+                    money(v),
+                    k === "revenue" ? t.dash.revenue : t.dash.profit,
+                  ]}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="revenue"
+                  stroke="var(--chart-1)"
+                  fill="url(#gr)"
+                  strokeWidth={2}
+                />
+                {admin && (
+                  <Area
+                    type="monotone"
+                    dataKey="profit"
+                    stroke="var(--chart-2)"
+                    fill="url(#gp)"
+                    strokeWidth={2}
+                  />
+                )}
               </AreaChart>
             </ResponsiveContainer>
           </div>
@@ -115,8 +209,12 @@ function Dashboard() {
               <div key={s.id} className="flex items-center gap-3 px-4 py-2.5 text-sm">
                 <span className="font-mono text-xs">{s.invoiceNo}</span>
                 <span className="text-xs text-muted-foreground">{date(s.timestamp)}</span>
-                <Badge variant="muted" className="ml-auto">{t.pos[s.paymentMethod]}</Badge>
-                {s.status !== "completed" && <Badge variant="warning">{t.ret.alreadyReturned}</Badge>}
+                <Badge variant="muted" className="ml-auto">
+                  {t.pos[s.paymentMethod]}
+                </Badge>
+                {s.status !== "completed" && (
+                  <Badge variant="warning">{t.ret.alreadyReturned}</Badge>
+                )}
                 <span className="w-28 text-right font-medium tabular">{money(s.total)}</span>
               </div>
             ))}
@@ -126,7 +224,10 @@ function Dashboard() {
           <div className="border-b px-4 py-3 text-sm font-medium">{t.dash.alertsList}</div>
           <div className="divide-y">
             {alerts.map((p) => (
-              <div key={p.id} className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm">
+              <div
+                key={p.id}
+                className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm"
+              >
                 <span>{pname(p)}</span>
                 <StockBadges p={p} />
               </div>
@@ -140,7 +241,8 @@ function Dashboard() {
 
 function ShiftCard() {
   const { t, money, date } = useI18n();
-  const { shift, openShift, addPettyExpense, closeShift, settings } = useStore();
+  const { shift, openShift, addPettyExpense, closeShift, settings, role } = useStore();
+  const admin = role === "admin";
   const [opening, setOpening] = useState("3000");
   const [reason, setReason] = useState("");
   const [amt, setAmt] = useState("");
@@ -154,8 +256,19 @@ function ShiftCard() {
         <div className="text-sm font-medium">{t.shift.register}</div>
         <p className="mt-1 text-sm text-muted-foreground">{t.shift.noShift}</p>
         <label className="mt-4 text-xs text-muted-foreground">{t.shift.openingCash}</label>
-        <Input className="mt-1" type="number" value={opening} onChange={(e) => setOpening(e.target.value)} />
-        <Button className="mt-3" onClick={() => { openShift(Number(opening) || 0); toast.success(t.shift.open); }}>
+        <Input
+          className="mt-1"
+          type="number"
+          value={opening}
+          onChange={(e) => setOpening(e.target.value)}
+        />
+        <Button
+          className="mt-3"
+          onClick={() => {
+            openShift(Number(opening) || 0);
+            toast.success(t.shift.open);
+          }}
+        >
           {t.shift.openShift}
         </Button>
         <SlipDialog slip={slip} onClose={() => setSlip(null)} storeName={settings.storeName} />
@@ -170,7 +283,9 @@ function ShiftCard() {
     <Panel className="flex flex-col p-4">
       <div className="flex items-center justify-between">
         <div className="text-sm font-medium">{t.shift.register}</div>
-        <span className="text-xs text-muted-foreground">{t.shift.openedAt} {date(shift.openedAt)}</span>
+        <span className="text-xs text-muted-foreground">
+          {t.shift.openedAt} {date(shift.openedAt)}
+        </span>
       </div>
       <dl className="mt-3 grid grid-cols-2 gap-2 text-sm">
         <dt className="text-muted-foreground">{t.shift.openingCash}</dt>
@@ -178,48 +293,89 @@ function ShiftCard() {
         <dt className="text-muted-foreground">{t.shift.expected}</dt>
         <dd className="text-right font-semibold tabular">{money(shift.expectedCash)}</dd>
       </dl>
-      <div className="mt-4 text-xs font-medium text-muted-foreground">{t.shift.expenses}</div>
-      <ul className="mt-1 space-y-1 text-sm">
-        {shift.pettyExpenses.map((e) => (
-          <li key={e.id} className="flex justify-between">
-            <span>{e.reason}</span>
-            <span className="text-danger tabular">− {money(e.amount)}</span>
-          </li>
-        ))}
-      </ul>
-      <form
-        className="mt-3 flex gap-2"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (!reason.trim() || !(Number(amt) > 0)) return toast.error(t.common.invalid);
-          addPettyExpense(reason.trim(), Number(amt));
-          setReason(""); setAmt("");
-        }}
-      >
-        <Input placeholder={t.shift.reason} value={reason} onChange={(e) => setReason(e.target.value)} />
-        <Input placeholder={t.shift.amount} type="number" className="w-24" value={amt} onChange={(e) => setAmt(e.target.value)} />
-        <Button type="submit" size="icon" variant="outline" aria-label={t.shift.addExpense}><Plus className="size-4" /></Button>
-      </form>
+      {admin && (
+        <>
+          <div className="mt-4 text-xs font-medium text-muted-foreground">{t.shift.expenses}</div>
+          <ul className="mt-1 space-y-1 text-sm">
+            {shift.pettyExpenses.map((e) => (
+              <li key={e.id} className="flex justify-between">
+                <span>{e.reason}</span>
+                <span className="text-danger tabular">− {money(e.amount)}</span>
+              </li>
+            ))}
+          </ul>
+          <form
+            className="mt-3 flex gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!reason.trim() || !(Number(amt) > 0)) return toast.error(t.common.invalid);
+              addPettyExpense(reason.trim(), Number(amt));
+              setReason("");
+              setAmt("");
+            }}
+          >
+            <Input
+              placeholder={t.shift.reason}
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+            />
+            <Input
+              placeholder={t.shift.amount}
+              type="number"
+              className="w-24"
+              value={amt}
+              onChange={(e) => setAmt(e.target.value)}
+            />
+            <Button type="submit" size="icon" variant="outline" aria-label={t.shift.addExpense}>
+              <Plus className="size-4" />
+            </Button>
+          </form>
+        </>
+      )}
       <Button variant="outline" className="mt-auto pt-2" onClick={() => setWizard(true)}>
         <Lock className="size-4" /> {t.shift.closeShift}
       </Button>
 
       <Dialog open={wizard} onOpenChange={setWizard}>
         <DialogContent>
-          <DialogHeader><DialogTitle>{t.shift.closeWizard}</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>{t.shift.closeWizard}</DialogTitle>
+          </DialogHeader>
           <p className="text-sm text-muted-foreground">{t.shift.countCash}</p>
-          <div className="flex justify-between text-sm"><span>{t.shift.expected}</span><span className="font-semibold tabular">{money(shift.expectedCash)}</span></div>
-          <Input autoFocus type="number" placeholder={t.shift.actual} value={counted} onChange={(e) => setCounted(e.target.value)} />
+          <div className="flex justify-between text-sm">
+            <span>{t.shift.expected}</span>
+            <span className="font-semibold tabular">{money(shift.expectedCash)}</span>
+          </div>
+          <Input
+            autoFocus
+            type="number"
+            placeholder={t.shift.actual}
+            value={counted}
+            onChange={(e) => setCounted(e.target.value)}
+          />
           {counted !== "" && (
-            <div className={cn("rounded-md p-3 text-sm font-medium", diff === 0 ? "bg-success-soft text-success" : diff > 0 ? "bg-warning-soft text-warning" : "bg-danger-soft text-danger")}>
-              {t.shift.discrepancy}: {diff === 0 ? t.shift.balanced : `${diff > 0 ? t.shift.over : t.shift.short} ${money(Math.abs(diff))}`}
+            <div
+              className={cn(
+                "rounded-md p-3 text-sm font-medium",
+                diff === 0
+                  ? "bg-success-soft text-success"
+                  : diff > 0
+                    ? "bg-warning-soft text-warning"
+                    : "bg-danger-soft text-danger",
+              )}
+            >
+              {t.shift.discrepancy}:{" "}
+              {diff === 0
+                ? t.shift.balanced
+                : `${diff > 0 ? t.shift.over : t.shift.short} ${money(Math.abs(diff))}`}
             </div>
           )}
           <Button
             disabled={counted === ""}
             onClick={() => {
               const s = closeShift(exp);
-              setWizard(false); setCounted("");
+              setWizard(false);
+              setCounted("");
               setSlip(s);
             }}
           >
@@ -231,7 +387,15 @@ function ShiftCard() {
   );
 }
 
-function SlipDialog({ slip, onClose, storeName }: { slip: ShiftRegister | null; onClose: () => void; storeName: string }) {
+function SlipDialog({
+  slip,
+  onClose,
+  storeName,
+}: {
+  slip: ShiftRegister | null;
+  onClose: () => void;
+  storeName: string;
+}) {
   const { t, money, date } = useI18n();
   if (!slip) return null;
   const exp = slip.pettyExpenses.reduce((a, e) => a + e.amount, 0);
@@ -245,18 +409,33 @@ function SlipDialog({ slip, onClose, storeName }: { slip: ShiftRegister | null; 
           <Row k={t.shift.openedAt} v={date(slip.openedAt)} />
           <Row k={t.common.close} v={date(slip.closedAt!)} />
           <Row k={t.shift.openingCash} v={money(slip.openingCash)} />
-          <Row k={t.shift.expenses} v={`− ${money(exp)}`} />
+          {useStore.getState().role === "admin" && (
+            <Row k={t.shift.expenses} v={`− ${money(exp)}`} />
+          )}
           <Row k={t.shift.expected} v={money(slip.expectedCash)} />
           <Row k={t.shift.actual} v={money(slip.actualCash ?? 0)} />
           <div className="my-2 border-t border-dashed" />
-          <Row k={t.shift.discrepancy} v={(slip.discrepancy ?? 0) === 0 ? t.shift.balanced : `${(slip.discrepancy ?? 0) > 0 ? t.shift.over : t.shift.short} ${money(Math.abs(slip.discrepancy ?? 0))}`} />
+          <Row
+            k={t.shift.discrepancy}
+            v={
+              (slip.discrepancy ?? 0) === 0
+                ? t.shift.balanced
+                : `${(slip.discrepancy ?? 0) > 0 ? t.shift.over : t.shift.short} ${money(Math.abs(slip.discrepancy ?? 0))}`
+            }
+          />
         </div>
-        <Button onClick={() => printArea("slip")}><Printer className="size-4" />{t.shift.printSlip}</Button>
+        <Button onClick={() => printArea("slip")}>
+          <Printer className="size-4" />
+          {t.shift.printSlip}
+        </Button>
       </DialogContent>
     </Dialog>
   );
 }
 
 const Row = ({ k, v }: { k: string; v: string }) => (
-  <div className="flex justify-between gap-2 py-0.5"><span>{k}</span><span className="text-right">{v}</span></div>
+  <div className="flex justify-between gap-2 py-0.5">
+    <span>{k}</span>
+    <span className="text-right">{v}</span>
+  </div>
 );

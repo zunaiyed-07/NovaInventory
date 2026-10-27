@@ -36,6 +36,19 @@ export function StockBadges({ p }: { p: Product }) {
 }
 
 export function CatIcon({ category }: { category: string }) {
-  const map: Record<string, string> = { groceries: "🌾", beverages: "🥤", hardware: "🔧", personal: "🧼", snacks: "🍿" };
+  const map: Record<string, string> = {
+    groceries: "🌾",
+    beverages: "🥤",
+    hardware: "🔧",
+    personal: "🧼",
+    snacks: "🍿",
+    kitchen: "🍳",
+    electronics: "🔌",
+    plastic: "🧺",
+    fruits: "🍎",
+    vegetables: "🥬",
+    household: "🧹",
+    stationery: "✏️",
+  };
   return <span aria-hidden>{map[category] ?? "📦"}</span>;
 }

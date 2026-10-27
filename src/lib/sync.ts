@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { useStore, type Data } from "./store";
+import { addDemoProducts } from "./mock";
 
 type SyncStatus = "connecting" | "synced" | "offline";
 type SyncSnapshot = { state: Data | null; revision: number; conflict?: boolean };
@@ -12,9 +13,28 @@ const useSyncStatusStore = create<{ status: SyncStatus; setStatus: (status: Sync
 export const useSyncStatus = () => useSyncStatusStore((state) => state.status);
 
 const selectData = (): Data => {
-  const { products, customers, sales, shift, shiftHistory, vouchers, expenses, settings } =
-    useStore.getState();
-  return { products, customers, sales, shift, shiftHistory, vouchers, expenses, settings };
+  const {
+    products,
+    productCategories,
+    customers,
+    sales,
+    shift,
+    shiftHistory,
+    vouchers,
+    expenses,
+    settings,
+  } = useStore.getState();
+  return {
+    products,
+    productCategories,
+    customers,
+    sales,
+    shift,
+    shiftHistory,
+    vouchers,
+    expenses,
+    settings,
+  };
 };
 
 const isData = (value: unknown): value is Data => {
@@ -22,6 +42,7 @@ const isData = (value: unknown): value is Data => {
   const data = value as Partial<Data>;
   return (
     Array.isArray(data.products) &&
+    (data.productCategories === undefined || Array.isArray(data.productCategories)) &&
     Array.isArray(data.customers) &&
     Array.isArray(data.sales) &&
     Array.isArray(data.expenses) &&
@@ -34,6 +55,10 @@ const isData = (value: unknown): value is Data => {
 };
 
 const same = (left: Data, right: Data) => JSON.stringify(left) === JSON.stringify(right);
+const normalizeData = (data: Data): Data => ({
+  ...data,
+  productCategories: data.productCategories ?? [],
+});
 
 function mergeRecord(
   base: Record<string, unknown> | undefined,
@@ -47,17 +72,20 @@ function mergeRecord(
   return mergeValues(base, local, remote);
 }
 
-function mergeValues(
-  base: Record<string, unknown>,
-  local: Record<string, unknown>,
-  remote: Record<string, unknown>,
-): Record<string, unknown> {
-  const result: Record<string, unknown> = { ...remote };
-  const keys = new Set([...Object.keys(base), ...Object.keys(local), ...Object.keys(remote)]);
+function mergeValues<T extends object>(base: T, local: T, remote: T): T {
+  const baseValues = Object.fromEntries(Object.entries(base));
+  const localValues = Object.fromEntries(Object.entries(local));
+  const remoteValues = Object.fromEntries(Object.entries(remote));
+  const result: Record<string, unknown> = { ...remoteValues };
+  const keys = new Set([
+    ...Object.keys(baseValues),
+    ...Object.keys(localValues),
+    ...Object.keys(remoteValues),
+  ]);
   for (const key of keys) {
-    const before = base[key];
-    const localValue = local[key];
-    const remoteValue = remote[key];
+    const before = baseValues[key];
+    const localValue = localValues[key];
+    const remoteValue = remoteValues[key];
     const localChanged = !sameValue(before, localValue);
     if (!localChanged) continue;
     const remoteChanged = !sameValue(before, remoteValue);
@@ -78,7 +106,7 @@ function mergeValues(
       result[key] = localValue;
     }
   }
-  return result;
+  return Object.assign({}, remote, result);
 }
 
 function mergeArray(
@@ -116,6 +144,11 @@ export function mergeSyncData(base: Data, local: Data, remote: Data): Data {
   return mergeValues(base, local, remote) as Data;
 }
 
+const includeDemoProducts = (data: Data): Data => {
+  const products = addDemoProducts(data.products);
+  return products === data.products ? data : { ...data, products };
+};
+
 export function startSync() {
   let base: Data | null = null;
   let revision = 0;
@@ -148,7 +181,12 @@ export function startSync() {
     ) {
       throw new Error("The local sync server returned invalid data.");
     }
-    return { ...(result as Omit<SyncSnapshot, "conflict">), conflict: response.status === 409 };
+    const snapshot = result as Omit<SyncSnapshot, "conflict">;
+    return {
+      ...snapshot,
+      state: snapshot.state ? normalizeData(snapshot.state) : null,
+      conflict: response.status === 409,
+    };
   };
   const markOffline = (error: unknown) => {
     setStatus("offline");
@@ -220,16 +258,16 @@ export function startSync() {
         base = response.state;
         revision = response.revision;
         const latestLocal = selectData();
+        const remote = includeDemoProducts(response.state);
         const merged = same(localAtStart, latestLocal)
-          ? base
-          : mergeSyncData(localAtStart, latestLocal, base);
+          ? remote
+          : mergeSyncData(localAtStart, latestLocal, remote);
         apply(merged);
         if (!same(merged, base)) scheduleWrite();
       } else if (response.revision !== revision) {
         const local = selectData();
-        const merged = same(local, base)
-          ? response.state
-          : mergeSyncData(base, local, response.state);
+        const remote = includeDemoProducts(response.state);
+        const merged = same(local, base) ? remote : mergeSyncData(base, local, remote);
         base = response.state;
         revision = response.revision;
         if (!same(local, merged)) apply(merged);

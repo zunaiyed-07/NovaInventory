@@ -13,7 +13,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { downloadFile, printArea } from "@/lib/download";
-import type { Product, Unit } from "@/lib/types";
+import { PRODUCT_CATEGORIES, type Product, type Unit } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 
@@ -32,22 +32,28 @@ export const Route = createFileRoute("/inventory")({
 
 type SortKey = "name" | "category" | "costPrice" | "sellingPrice" | "margin" | "stock";
 const PAGE = 8;
-const CATS = ["groceries", "beverages", "hardware", "personal", "snacks"] as const;
+const CATS = PRODUCT_CATEGORIES;
 const margin = (p: Product) => (p.sellingPrice > 0 ? ((p.sellingPrice - p.costPrice) / p.sellingPrice) * 100 : 0);
 
 function Inventory() {
   const { t, money, num, pname } = useI18n();
   const search = Route.useSearch();
-  const { products, role, deleteProduct, importProducts } = useStore();
+  const { products, productCategories, role, deleteProduct, importProducts } = useStore();
   const admin = role === "admin";
   const [q, setQ] = useState(search.q ?? "");
   const [tab, setTab] = useState<"all" | "low" | "expiry">("all");
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [sort, setSort] = useState<{ k: SortKey; dir: 1 | -1 }>({ k: "name", dir: 1 });
   const [page, setPage] = useState(0);
   const [isAddProductOpen, setIsAddProductOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [labels, setLabels] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const categoryLabel = (id: string) =>
+    productCategories.find((category) => category.id === id)?.label ??
+    t.cat[id as keyof typeof t.cat] ??
+    id;
+  const categories = [...CATS, ...productCategories.map((category) => category.id)];
 
   useEffect(() => setQ(search.q ?? ""), [search.q]);
 
@@ -56,12 +62,13 @@ function Inventory() {
     const val = (p: Product) => (sort.k === "name" ? pname(p) : sort.k === "margin" ? margin(p) : p[sort.k]);
     return products
       .filter((p) => tab === "all" || (tab === "low" ? stockState(p) !== "normal" : isNearExpiry(p)))
+      .filter((p) => categoryFilter === "all" || p.category === categoryFilter)
       .filter((p) => !s || [p.name.en, p.name.bn, p.sku, p.barcode].some((v) => v.toLowerCase().includes(s)))
       .sort((a, b) => (val(a) > val(b) ? 1 : val(a) < val(b) ? -1 : 0) * sort.dir);
-  }, [products, q, tab, sort, pname]);
+  }, [products, q, tab, categoryFilter, sort, pname]);
   const pages = Math.max(1, Math.ceil(rows.length / PAGE));
   const view = rows.slice(page * PAGE, page * PAGE + PAGE);
-  useEffect(() => setPage(0), [q, tab]);
+  useEffect(() => setPage(0), [q, tab, categoryFilter]);
 
   const exportCsv = () => {
     const head = "sku,barcode,name_en,name_bn,category,cost,price,stock,min_alert,expiry,unit";
@@ -99,7 +106,7 @@ function Inventory() {
           <Button variant="outline" size="sm" onClick={() => setLabels(true)}><Tag className="size-4" />{t.inv.labels}</Button>
           <Button variant="outline" size="sm" onClick={exportCsv}><Download className="size-4" />{t.inv.exportCsv}</Button>
           {admin && <Button variant="outline" size="sm" onClick={() => fileRef.current?.click()}><Upload className="size-4" />{t.inv.importCsv}</Button>}
-          {admin && <Button size="sm" onClick={() => { setEditingProduct(null); setIsAddProductOpen(true); }}><Plus className="size-4" />{t.inv.addProduct}</Button>}
+          <Button size="sm" onClick={() => { setEditingProduct(null); setIsAddProductOpen(true); }}><Plus className="size-4" />{t.inv.addProduct}</Button>
           <input ref={fileRef} type="file" accept=".csv" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) importCsv(f); e.target.value = ""; }} />
         </>}
       />
@@ -110,6 +117,19 @@ function Inventory() {
               <button key={k} onClick={() => setTab(k)} className={cn("rounded px-3 py-1 font-medium", tab === k ? "bg-card shadow-sm" : "text-muted-foreground")}>{l}</button>
             ))}
           </div>
+          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+            <SelectTrigger className="h-8 w-auto min-w-36">
+              <SelectValue placeholder={t.inv.category} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t.common.all}</SelectItem>
+              {categories.map((category) => (
+                <SelectItem key={category} value={category}>
+                  {categoryLabel(category)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Input className="ml-auto h-8 max-w-xs" placeholder={t.pos.searchPlaceholder} value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
         <div className="overflow-x-auto">
@@ -126,7 +146,7 @@ function Inventory() {
                 <tr key={p.id} className="hover:bg-muted/40">
                   <td className="px-3 py-2.5 font-medium">{pname(p)}</td>
                   <td className="px-3 py-2.5 font-mono text-xs text-muted-foreground">{p.sku}<div>{p.barcode}</div></td>
-                  <td className="px-3 py-2.5">{t.cat[p.category as keyof typeof t.cat] ?? p.category}</td>
+                  <td className="px-3 py-2.5">{categoryLabel(p.category)}</td>
                   {admin && <td className="px-3 py-2.5 tabular">{money(p.costPrice)}</td>}
                   <td className="px-3 py-2.5 tabular">{money(p.sellingPrice)}</td>
                   {admin && <td className={cn("px-3 py-2.5 tabular", margin(p) > 0 ? "text-success" : "text-danger")}>{num(Math.round(margin(p) * 10) / 10)}%</td>}
@@ -141,7 +161,7 @@ function Inventory() {
                   </td>
                 </tr>
               ))}
-              {!view.length && <tr><td colSpan={8} className="p-8 text-center text-muted-foreground">{t.common.none}</td></tr>}
+              {!view.length && <tr><td colSpan={admin ? 8 : 6} className="p-8 text-center text-muted-foreground">{t.common.none}</td></tr>}
             </tbody>
           </table>
         </div>
@@ -162,7 +182,7 @@ function Inventory() {
 
 function ProductSheet({ value, onClose }: { value: Product | null | "new"; onClose: () => void }) {
   const { t, num } = useI18n();
-  const { upsertProduct, role, products } = useStore();
+  const { upsertProduct, role, products, productCategories } = useStore();
   const isMobile = useIsMobile();
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const blank: Product = { id: "", sku: "", barcode: "", name: { en: "", bn: "" }, category: "groceries", costPrice: 0, sellingPrice: 0, stock: 0, minStockAlert: 5, unit: "pcs" };
@@ -212,7 +232,15 @@ function ProductSheet({ value, onClose }: { value: Product | null | "new"; onClo
             <F label={t.inv.category}>
               <Select value={f.category} onValueChange={(v) => set("category", v)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>{CATS.map((c) => <SelectItem key={c} value={c}>{t.cat[c]}</SelectItem>)}</SelectContent>
+                <SelectContent>
+                  {[...CATS, ...productCategories.map((category) => category.id)].map((category) => (
+                    <SelectItem key={category} value={category}>
+                      {productCategories.find((item) => item.id === category)?.label ??
+                        t.cat[category as keyof typeof t.cat] ??
+                        category}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
               </Select>
             </F>
             <F label={t.inv.unit}>

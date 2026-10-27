@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import {
   Boxes,
   LayoutDashboard,
@@ -27,6 +27,9 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { toast } from "sonner";
 
 const NAV = [
   { to: "/", key: "dashboard", icon: LayoutDashboard },
@@ -71,7 +74,31 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { t, pname } = useI18n();
   const { lang, setLang, role, setRole, theme, setTheme, shift, products, customers } = useStore();
   const [open, setOpen] = useState(false);
+  const [roleTarget, setRoleTarget] = useState<"admin" | "cashier" | null>(null);
+  const [password, setPassword] = useState("");
   const navigate = useNavigate();
+  const nav = role === "admin" ? NAV : NAV.filter((item) => item.key !== "reports");
+
+  const requestRole = (target: "admin" | "cashier") => {
+    if (target === role) return;
+    if (target === "cashier") {
+      setRole("cashier");
+      return;
+    }
+    setPassword("");
+    setRoleTarget("admin");
+  };
+
+  const confirmRole = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (password !== "admin") {
+      setPassword("");
+      toast.error(t.common.passwordIncorrect);
+      return;
+    }
+    if (roleTarget) setRole(roleTarget);
+    setRoleTarget(null);
+  };
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -92,7 +119,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen">
       <header className="sticky top-0 z-40 border-b bg-background/85 backdrop-blur">
-        <div className="mx-auto flex h-14 max-w-[1440px] items-center gap-3 px-4">
+        <div className="mx-auto flex min-h-14 max-w-[1440px] flex-wrap items-center gap-3 px-4 max-[1150px]:gap-y-2 max-[1150px]:py-2">
           <Link to="/" className="flex items-center gap-2">
             <div className="grid size-7 place-items-center rounded-md bg-foreground text-background">
               <span className="text-sm font-bold">N</span>
@@ -106,8 +133,8 @@ export function AppShell({ children }: { children: ReactNode }) {
             className={cn("size-2 shrink-0 rounded-full", shift ? "bg-success" : "bg-danger")}
           />
 
-          <nav className="ml-4 hidden items-center gap-0.5 lg:flex">
-            {NAV.map((n) => (
+          <nav className="ml-4 hidden items-center gap-0.5 lg:flex max-[1150px]:order-last max-[1150px]:ml-0 max-[1150px]:w-full max-[1150px]:flex-wrap">
+            {nav.map((n) => (
               <Link
                 key={n.to}
                 to={n.to}
@@ -134,7 +161,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <div className="hidden sm:block">
               <Seg
                 value={role}
-                onChange={setRole}
+                onChange={requestRole}
                 options={[
                   { v: "admin", label: t.common.admin },
                   { v: "cashier", label: t.common.cashier },
@@ -160,8 +187,8 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </div>
       </header>
-      <nav className="fixed inset-x-0 bottom-0 z-40 flex gap-1 overflow-x-auto border-t bg-background/95 px-3 py-1.5 backdrop-blur lg:hidden">
-        {NAV.map((n) => (
+      <nav className="scrollbar-hidden fixed inset-x-0 bottom-0 z-40 flex gap-1 overflow-x-auto border-t bg-background/95 px-3 py-1.5 backdrop-blur lg:hidden">
+        {nav.map((n) => (
           <Link
             key={n.to}
             to={n.to}
@@ -176,7 +203,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="ml-auto shrink-0 sm:hidden">
           <Seg
             value={role}
-            onChange={setRole}
+            onChange={requestRole}
             options={[
               { v: "admin", label: t.common.admin },
               { v: "cashier", label: t.common.cashier },
@@ -185,14 +212,16 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       </nav>
 
-      <main className="mx-auto max-w-[1440px] px-4 py-6 pb-24 lg:pb-6">{children}</main>
+      <main className="app-animated mx-auto max-w-[1440px] px-4 py-6 pb-24 lg:pb-6">
+        {children}
+      </main>
 
       <CommandDialog open={open} onOpenChange={setOpen}>
         <CommandInput placeholder={t.cmd.placeholder} />
         <CommandList>
           <CommandEmpty>{t.cmd.empty}</CommandEmpty>
           <CommandGroup heading={t.cmd.views}>
-            {NAV.map((n) => (
+            {nav.map((n) => (
               <CommandItem
                 key={n.to}
                 value={`view ${t.nav[n.key]} ${n.key}`}
@@ -231,6 +260,39 @@ export function AppShell({ children }: { children: ReactNode }) {
           </CommandGroup>
         </CommandList>
       </CommandDialog>
+
+      <Dialog
+        open={roleTarget !== null}
+        onOpenChange={(isOpen) => {
+          if (!isOpen) {
+            setRoleTarget(null);
+            setPassword("");
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {roleTarget === "admin" ? t.common.adminMode : t.common.cashierMode}
+            </DialogTitle>
+          </DialogHeader>
+          <form className="space-y-3" onSubmit={confirmRole}>
+            <label className="block space-y-1">
+              <span className="text-sm text-muted-foreground">{t.common.passwordPrompt}</span>
+              <Input
+                autoFocus
+                type="password"
+                autoComplete="current-password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+              />
+            </label>
+            <Button className="w-full" type="submit">
+              {t.common.confirm}
+            </Button>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       <InstallPrompt />
     </div>

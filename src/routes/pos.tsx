@@ -32,7 +32,13 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { beep, printArea } from "@/lib/download";
-import type { CartItem, PaymentMethod, Product, SaleTransaction } from "@/lib/types";
+import {
+  PRODUCT_CATEGORIES,
+  type CartItem,
+  type PaymentMethod,
+  type Product,
+  type SaleTransaction,
+} from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/pos")({
@@ -55,14 +61,14 @@ export const Route = createFileRoute("/pos")({
   component: POS,
 });
 
-const CATS = ["all", "groceries", "beverages", "hardware", "personal", "snacks"] as const;
-
 function POS() {
   const { t, money, num, pname } = useI18n();
-  const { products, customers, settings, shift, checkout, vouchers } = useStore();
+  const { products, productCategories, customers, settings, shift, checkout, vouchers } =
+    useStore();
   const [q, setQ] = useState("");
   const [cat, setCat] = useState<string>("all");
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [quantityDrafts, setQuantityDrafts] = useState<Record<string, string>>({});
   const cartRef = useRef(cart);
   cartRef.current = cart;
   const [discType, setDiscType] = useState<"flat" | "percent">("flat");
@@ -79,6 +85,11 @@ function POS() {
   const [scanOpen, setScanOpen] = useState(false);
   const [done, setDone] = useState<SaleTransaction | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const categories = ["all", ...PRODUCT_CATEGORIES, ...productCategories.map((category) => category.id)];
+  const categoryLabel = (id: string) =>
+    productCategories.find((category) => category.id === id)?.label ??
+    t.cat[id as keyof typeof t.cat] ??
+    id;
 
   useEffect(() => searchRef.current?.focus(), []);
 
@@ -167,7 +178,35 @@ function POS() {
     }
     const live = products.find((x) => x.id === id);
     if (!live || qn > live.stock) return toast.error(t.pos.stockLimit);
+    if (live.unit === "pcs" && !Number.isInteger(qn)) return toast.error(t.common.invalid);
     setCart((c) => c.map((i) => (i.id === id ? { ...i, quantity: qn } : i)));
+  };
+  const changeQtyByStep = (item: CartItem, direction: -1 | 1) => {
+    const step = item.unit === "pcs" ? 1 : 0.1;
+    const quantity = Math.round((item.quantity + direction * step) * 1000) / 1000;
+    setQty(item.id, quantity);
+  };
+  const commitQtyDraft = (item: CartItem) => {
+    const draft = quantityDrafts[item.id];
+    if (draft !== undefined) {
+      const quantity = Number(draft);
+      if (
+        draft.trim() &&
+        Number.isFinite(quantity) &&
+        quantity > 0 &&
+        quantity <= item.stock &&
+        (item.unit !== "pcs" || Number.isInteger(quantity))
+      ) {
+        setQty(item.id, quantity);
+      } else {
+        toast.error(item.unit === "pcs" && Number.isFinite(quantity) ? t.common.invalid : t.pos.stockLimit);
+      }
+    }
+    setQuantityDrafts((drafts) => {
+      const next = { ...drafts };
+      delete next[item.id];
+      return next;
+    });
   };
 
   const safeNumber = (value: number) => (Number.isFinite(value) ? value : 0);
@@ -252,7 +291,7 @@ function POS() {
   };
 
   const catalog = (
-    <Panel className="flex h-full flex-col">
+    <Panel className="flex h-full min-h-0 min-w-0 flex-col">
       <div className="space-y-3 border-b p-3">
         <div className="flex gap-2">
           <div className="relative flex-1">
@@ -283,19 +322,19 @@ function POS() {
             {t.pos.scan}
           </Button>
         </div>
-        <div className="flex gap-1.5 overflow-x-auto">
-          {CATS.map((c) => (
+        <div className="scrollbar-hidden flex gap-1.5 overflow-x-auto overscroll-x-contain touch-pan-x">
+          {categories.map((c) => (
             <button
               key={c}
               onClick={() => setCat(c)}
               className={cn(
-                "shrink-0 rounded-full border px-3 py-1 text-xs transition-colors",
+                "shrink-0 rounded-full border px-3 py-1 text-xs transition-all duration-150 hover:-translate-y-0.5 hover:scale-[1.03] active:scale-[0.97]",
                 cat === c
                   ? "border-foreground bg-foreground text-background"
                   : "text-muted-foreground hover:text-foreground",
               )}
             >
-              {t.cat[c]}
+              {c === "all" ? t.common.all : categoryLabel(c)}
             </button>
           ))}
         </div>
@@ -331,10 +370,10 @@ function POS() {
   );
 
   const cartPanel = (
-    <Panel className="flex h-full flex-col">
+    <Panel className="flex h-full min-h-0 min-w-0 flex-col overflow-y-auto">
       <div className="flex items-center justify-between border-b px-3 py-2.5">
         <span className="text-sm font-medium">
-          {t.pos.cart} · {num(cart.reduce((a, i) => a + i.quantity, 0))} {t.common.items}
+          {t.pos.cart} · {num(cart.length)} {t.common.items}
         </span>
         {cart.length > 0 && (
           <Button size="sm" variant="ghost" onClick={reset}>
@@ -350,7 +389,7 @@ function POS() {
           </Link>
         </div>
       )}
-      <div className="flex-1 divide-y overflow-y-auto">
+      <div className="shrink-0 divide-y">
         {cart.length === 0 && (
           <p className="p-6 text-center text-sm text-muted-foreground">{t.pos.emptyCart}</p>
         )}
@@ -367,22 +406,44 @@ function POS() {
               </button>
             </div>
             <div className="mt-1.5 flex items-center gap-2">
-              <div className="flex items-center rounded-md border">
+              <div className="flex min-w-0 items-center gap-1">
                 <button
-                  className="p-1.5"
-                  onClick={() => setQty(i.id, i.quantity - 1)}
+                  className="rounded-md border p-1.5"
+                  onClick={() => changeQtyByStep(i, -1)}
                   aria-label="-"
                 >
                   <Minus className="size-3" />
                 </button>
-                <span className="w-8 text-center text-sm tabular">{num(i.quantity)}</span>
+                <Input
+                  type="number"
+                  min={i.unit === "pcs" ? 1 : 0.001}
+                  max={i.stock}
+                  step={i.unit === "pcs" ? 1 : 0.001}
+                  value={quantityDrafts[i.id] ?? String(i.quantity)}
+                  onFocus={() =>
+                    setQuantityDrafts((drafts) => ({
+                      ...drafts,
+                      [i.id]: drafts[i.id] ?? String(i.quantity),
+                    }))
+                  }
+                  onChange={(event) =>
+                    setQuantityDrafts((drafts) => ({ ...drafts, [i.id]: event.target.value }))
+                  }
+                  onBlur={() => commitQtyDraft(i)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") event.currentTarget.blur();
+                  }}
+                  aria-label={`${t.pos.quantity} (${t.unit[i.unit]})`}
+                  className="h-8 w-20 px-1 text-center text-sm tabular"
+                />
                 <button
-                  className="p-1.5"
-                  onClick={() => setQty(i.id, i.quantity + 1)}
+                  className="rounded-md border p-1.5"
+                  onClick={() => changeQtyByStep(i, 1)}
                   aria-label="+"
                 >
                   <Plus className="size-3" />
                 </button>
+                <span className="shrink-0 text-xs text-muted-foreground">{t.unit[i.unit]}</span>
               </div>
               <Input
                 type="number"
@@ -412,7 +473,7 @@ function POS() {
         ))}
       </div>
 
-      <div className="space-y-3 border-t p-3 text-sm">
+      <div className="shrink-0 space-y-3 p-3 text-sm">
         <div className="flex gap-2">
           <div className="flex rounded-md border p-0.5 text-xs">
             {(["flat", "percent"] as const).map((d) => (
@@ -549,23 +610,30 @@ function POS() {
   );
 
   return (
-    <>
-      <div className="hidden h-[calc(100vh-7.5rem)] gap-4 lg:grid lg:grid-cols-[3fr_2fr]">
+    <div className="lg:-mb-6">
+      <div className="hidden h-[calc(100dvh-6.5rem)] min-h-0 min-w-0 gap-4 lg:grid lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] max-[1150px]:h-[calc(100dvh-9rem)]">
         {catalog}
         {cartPanel}
       </div>
-      <Tabs defaultValue="catalog" className="lg:hidden">
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="catalog">{t.pos.catalog}</TabsTrigger>
-          <TabsTrigger value="cart">
+      <Tabs defaultValue="catalog" className="min-h-0 min-w-0 lg:hidden">
+        <TabsList className="sticky top-14 z-30 grid h-12 w-full grid-cols-2 bg-background/95 p-1 backdrop-blur">
+          <TabsTrigger value="catalog" className="min-w-0 truncate">
+            {t.pos.catalog}
+          </TabsTrigger>
+          <TabsTrigger value="cart" className="min-w-0 gap-1 overflow-hidden">
             <ShoppingCart className="mr-1 size-3.5" />
-            {t.pos.cart} ({num(cart.length)}) · {money(total)}
+            <span className="truncate">
+              {t.pos.cart} ({num(cart.length)})
+            </span>
+            <span className="hidden shrink-0 sm:inline">· {money(total)}</span>
           </TabsTrigger>
         </TabsList>
-        <TabsContent value="catalog" className="h-[calc(100vh-11rem)]">
+        <TabsContent value="catalog" className="h-[calc(100dvh-14rem)] min-h-0 min-w-0">
           {catalog}
         </TabsContent>
-        <TabsContent value="cart">{cartPanel}</TabsContent>
+        <TabsContent value="cart" className="h-[calc(100dvh-14rem)] min-h-0">
+          {cartPanel}
+        </TabsContent>
       </Tabs>
 
       <BarcodeScanner
@@ -616,7 +684,7 @@ function POS() {
           </div>
         </DialogContent>
       </Dialog>
-    </>
+    </div>
   );
 }
 

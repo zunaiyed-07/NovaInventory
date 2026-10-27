@@ -3,9 +3,28 @@ import { useStore, type Data } from "@/lib/store";
 import { mergeSyncData } from "@/lib/sync";
 
 const snapshot = (): Data => {
-  const { products, customers, sales, shift, shiftHistory, vouchers, expenses, settings } =
-    useStore.getState();
-  return { products, customers, sales, shift, shiftHistory, vouchers, expenses, settings };
+  const {
+    products,
+    productCategories,
+    customers,
+    sales,
+    shift,
+    shiftHistory,
+    vouchers,
+    expenses,
+    settings,
+  } = useStore.getState();
+  return {
+    products,
+    productCategories,
+    customers,
+    sales,
+    shift,
+    shiftHistory,
+    vouchers,
+    expenses,
+    settings,
+  };
 };
 
 describe("local device synchronization", () => {
@@ -38,5 +57,19 @@ describe("local device synchronization", () => {
     expect(merged.sales.map((sale) => sale.id)).toContain("local-sale");
     expect(merged.sales.map((sale) => sale.id)).toContain("remote-sale");
     expect(merged.shift?.expectedCash).toBe((base.shift?.expectedCash ?? 0) + 50);
+  });
+
+  it("keeps categories added independently on two connected devices", () => {
+    useStore.getState().resetData();
+    const base = snapshot();
+    const localCategory = { id: "custom-local", label: "Bakery" };
+    const remoteCategory = { id: "custom-remote", label: "Frozen food" };
+    const merged = mergeSyncData(
+      base,
+      { ...base, productCategories: [localCategory] },
+      { ...base, productCategories: [remoteCategory] },
+    );
+
+    expect(merged.productCategories).toEqual([localCategory, remoteCategory]);
   });
 });

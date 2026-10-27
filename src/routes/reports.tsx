@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import {
   Banknote,
   Boxes,
@@ -87,9 +88,13 @@ const localDate = () => {
 
 function Reports() {
   const { t, money, num, date, lang } = useI18n();
-  const { sales, expenses, settings, deleteExpense } = useStore();
+  const { sales, expenses, settings, deleteExpense, role } = useStore();
+  const navigate = useNavigate();
   const [month, setMonth] = useState(currentMonth);
   const [isExpenseOpen, setIsExpenseOpen] = useState(false);
+  useEffect(() => {
+    if (role === "cashier") void navigate({ to: "/", replace: true });
+  }, [navigate, role]);
   const monthlySales = useMemo(
     () => sales.filter((sale) => sale.status !== "returned" && saleMonth(sale.timestamp) === month),
     [sales, month],
@@ -176,6 +181,8 @@ function Reports() {
   ];
 
   const formatExpenseDate = (value: string) => date(`${value}T12:00:00`, false);
+
+  if (role === "cashier") return null;
 
   return (
     <>

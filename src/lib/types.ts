@@ -2,6 +2,24 @@ export type Unit = "pcs" | "kg" | "ltr";
 export type Lang = "en" | "bn";
 export type Role = "admin" | "cashier";
 export type PaymentMethod = "cash" | "card" | "mfs" | "credit";
+export interface ProductCategory {
+  id: string;
+  label: string;
+}
+export const PRODUCT_CATEGORIES = [
+  "groceries",
+  "beverages",
+  "hardware",
+  "personal",
+  "snacks",
+  "kitchen",
+  "electronics",
+  "plastic",
+  "fruits",
+  "vegetables",
+  "household",
+  "stationery",
+] as const;
 
 export interface Product {
   id: string;
